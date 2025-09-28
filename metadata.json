@@ -1,0 +1,5 @@
+{
+  "name": "Multi-Centre Research Data Management Platform",
+  "description": "A platform for research organizations to collect, manage, and analyze patient data across multiple research centres while maintaining proper access controls and data integrity.",
+  "requestFramePermissions": []
+}
