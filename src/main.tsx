@@ -32,6 +32,11 @@ type NotificationType = {
   message: string;
   type: 'success' | 'error';
 };
+type Invitation = {
+    email: string;
+    role: 'admin' | 'researcher' | 'data-entry';
+    centerId: number;
+};
 
 type FormField = {
     id: string;
@@ -268,7 +273,12 @@ const LoadingSpinner = () => (
     </div>
 );
 
-const Notification = ({ message, type, onClose }) => {
+type NotificationProps = {
+    message: string;
+    type: 'success' | 'error';
+    onClose: () => void;
+};
+const Notification = ({ message, type, onClose }: NotificationProps) => {
     useEffect(() => {
         const timer = setTimeout(onClose, 4000);
         return () => clearTimeout(timer);
@@ -281,8 +291,14 @@ const Notification = ({ message, type, onClose }) => {
     );
 };
 
-// Fix: Add inline types to Modal props to make `onConfirm` optional, resolving missing property errors.
-const Modal = ({ title, children, onClose, onConfirm, confirmText = "Confirm" }: { title: any, children: any, onClose: any, onConfirm?: any, confirmText?: string }) => {
+type ModalProps = {
+    title: string;
+    children: React.ReactNode;
+    onClose: () => void;
+    onConfirm?: () => void;
+    confirmText?: string;
+};
+const Modal = ({ title, children, onClose, onConfirm, confirmText = "Confirm" }: ModalProps) => {
     return (
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
@@ -308,17 +324,22 @@ const Modal = ({ title, children, onClose, onConfirm, confirmText = "Confirm" }:
 const IconDashboard = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>;
 const IconPatients = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg>;
 const IconUsers = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M15 21a6 6 0 00-9-5.197M15 21a6 6 0 006-5.197" /></svg>;
-const IconCenters = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m-1 4h1m5-4h1m-1 4h1m-1-4h1m-1 4h1" /></svg>;
+const IconCenters = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m-1 4h1m5-4h1m-1 4h1m-1-4h1" /></svg>;
 const IconLogout = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>;
 const IconPlus = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>;
 const IconExport = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>;
-const IconEdit = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.5L15.232 5.232z" /></svg>;
-const IconDelete = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
 const IconMenu = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>;
 
 // --- LAYOUT COMPONENTS ---
 
-function Sidebar({ currentPage, setCurrentPage, userRole, isOpen, setIsOpen }) {
+type SidebarProps = {
+    currentPage: string;
+    setCurrentPage: (page: string) => void;
+    userRole: UserProfile['role'];
+    isOpen: boolean;
+    setIsOpen: (isOpen: boolean) => void;
+};
+function Sidebar({ currentPage, setCurrentPage, userRole, isOpen, setIsOpen }: SidebarProps) {
     const navLinks = [
         { name: 'Dashboard', icon: <IconDashboard />, page: 'dashboard', roles: ['admin', 'researcher', 'data-entry'] },
         { name: 'Patients', icon: <IconPatients />, page: 'patients', roles: ['admin', 'researcher', 'data-entry'] },
@@ -327,7 +348,7 @@ function Sidebar({ currentPage, setCurrentPage, userRole, isOpen, setIsOpen }) {
         { name: 'Centers', icon: <IconCenters />, page: 'centers', roles: ['admin'] },
     ];
 
-    const handleNav = (page) => {
+    const handleNav = (page: string) => {
         setCurrentPage(page);
         setIsOpen(false); // Close sidebar on navigation on mobile
     };
@@ -351,8 +372,12 @@ function Sidebar({ currentPage, setCurrentPage, userRole, isOpen, setIsOpen }) {
     );
 }
 
-
-function Header({ currentUser, onLogout, onMenuClick }) {
+type HeaderProps = {
+    currentUser: UserProfile;
+    onLogout: () => void;
+    onMenuClick: () => void;
+};
+function Header({ currentUser, onLogout, onMenuClick }: HeaderProps) {
     return (
         <header className="header">
             <button className="mobile-menu-btn" onClick={onMenuClick}>
@@ -370,7 +395,14 @@ function Header({ currentUser, onLogout, onMenuClick }) {
 
 // --- PAGE COMPONENTS ---
 
-const DashboardPage = ({ stats }) => (
+type DashboardPageProps = {
+    stats: {
+        patients: number;
+        users: number;
+        centers: number;
+    };
+};
+const DashboardPage = ({ stats }: DashboardPageProps) => (
     <div>
         <div className="page-header">
             <h1>Dashboard</h1>
@@ -392,7 +424,11 @@ const DashboardPage = ({ stats }) => (
     </div>
 );
 
-function PatientsPage({ currentUser, showNotification }) {
+type PatientsPageProps = {
+    currentUser: UserProfile;
+    showNotification: (message: string, type: 'success' | 'error') => void;
+};
+function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
     const [patients, setPatients] = useState<Patient[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -506,14 +542,26 @@ function PatientsPage({ currentUser, showNotification }) {
     );
 }
 
-function AddUserForm({ centers, onAddUser, onCancel, showNotification }) {
+type AddUserFormData = {
+    name: string;
+    email: string;
+    role: 'researcher' | 'data-entry';
+    centerId: number;
+};
+type AddUserFormProps = {
+    centers: Center[];
+    onAddUser: (user: AddUserFormData) => Promise<void>;
+    onCancel: () => void;
+    showNotification: (message: string, type: 'success' | 'error') => void;
+};
+function AddUserForm({ centers, onAddUser, onCancel, showNotification }: AddUserFormProps) {
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [role, setRole] = useState<'researcher' | 'data-entry'>('data-entry');
     const [centerId, setCenterId] = useState<number | ''>('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!name || !email || !role || !centerId) {
             showNotification('All fields are required.', 'error');
@@ -558,8 +606,10 @@ function AddUserForm({ centers, onAddUser, onCancel, showNotification }) {
     );
 }
 
-
-function UsersPage({ showNotification }) {
+type UsersPageProps = {
+    showNotification: (message: string, type: 'success' | 'error') => void;
+};
+function UsersPage({ showNotification }: UsersPageProps) {
     const [users, setUsers] = useState<UserProfile[]>([]);
     const [centers, setCenters] = useState<Center[]>([]);
     const [loading, setLoading] = useState(true);
@@ -588,7 +638,7 @@ function UsersPage({ showNotification }) {
         fetchData();
     }, [fetchData]);
     
-    const handleInviteUser = async (newUserData) => {
+    const handleInviteUser = async (newUserData: AddUserFormData) => {
         const { data, error } = await supabase
             .from('invitations')
             .insert({
@@ -680,8 +730,10 @@ function UsersPage({ showNotification }) {
     );
 }
 
-
-function CentersPage({ showNotification }) {
+type CentersPageProps = {
+    showNotification: (message: string, type: 'success' | 'error') => void;
+};
+function CentersPage({ showNotification }: CentersPageProps) {
     const [centers, setCenters] = useState<Center[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -731,31 +783,36 @@ function CentersPage({ showNotification }) {
     );
 }
 
-function AddPatientPage({ showNotification, onPatientAdded, currentUser }) {
+type AddPatientPageProps = {
+    showNotification: (message: string, type: 'success' | 'error') => void;
+    onPatientAdded: () => void;
+    currentUser: UserProfile;
+};
+function AddPatientPage({ showNotification, onPatientAdded, currentUser }: AddPatientPageProps) {
     const [currentStep, setCurrentStep] = useState(0);
     // Fix: Specify `any` type for formData state to allow dynamic properties and prevent errors on access.
     const [formData, setFormData] = useState<any>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const handleInputChange = (sectionIndex, fieldId, value) => {
-        setFormData(prev => ({
+    const handleInputChange = (fieldId: string, value: any) => {
+        setFormData((prev: any) => ({
             ...prev,
             [fieldId]: value
         }));
     };
 
-    const handleCheckboxChange = (fieldId, option, checked) => {
+    const handleCheckboxChange = (fieldId: string, option: string, checked: boolean) => {
         const currentValues = formData[fieldId] || [];
         const newValues = checked
             ? [...currentValues, option]
-            : currentValues.filter(item => item !== option);
-        setFormData(prev => ({ ...prev, [fieldId]: newValues }));
+            : currentValues.filter((item: string) => item !== option);
+        setFormData((prev: any) => ({ ...prev, [fieldId]: newValues }));
     };
 
     const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, formStructure.length - 1));
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 0));
 
-    const handleSubmit = async (e) => {
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
         
@@ -780,7 +837,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser }) {
         }
     };
 
-    const renderField = (field, sectionIndex) => {
+    const renderField = (field: FormField) => {
         if (field.condition && !field.condition(formData)) {
             return null;
         }
@@ -788,7 +845,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser }) {
         const commonProps = {
             id: field.id,
             value: formData[field.id] || '',
-            onChange: e => handleInputChange(sectionIndex, field.id, e.target.value),
+            onChange: (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => handleInputChange(field.id, e.target.value),
         };
 
         return (
@@ -799,14 +856,14 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser }) {
                 {field.type === 'textarea' && <textarea {...commonProps} rows={3} />}
                 {field.type === 'radio' && (
                     <div className="radio-group">
-                        {field.options.map(option => (
+                        {field.options?.map(option => (
                             <label key={option}>
                                 <input
                                     type="radio"
                                     name={field.id}
                                     value={option}
                                     checked={formData[field.id] === option}
-                                    onChange={e => handleInputChange(sectionIndex, field.id, e.target.value)}
+                                    onChange={e => handleInputChange(field.id, e.target.value)}
                                 />
                                 {option}
                             </label>
@@ -815,7 +872,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser }) {
                 )}
                 {field.type === 'checkbox' && (
                      <div className="checkbox-group">
-                        {field.options.map(option => (
+                        {field.options?.map(option => (
                             <label key={option}>
                                 <input
                                     type="checkbox"
@@ -846,7 +903,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser }) {
                         <p className="form-section-description">{formStructure[currentStep].description}</p>
                     )}
                     <div className="form-step-fields">
-                        {formStructure[currentStep].fields.map((field) => renderField(field, currentStep))}
+                        {formStructure[currentStep].fields.map((field) => renderField(field))}
                     </div>
                      <div className="form-navigation">
                         <button type="button" className="btn btn-secondary" onClick={prevStep} disabled={currentStep === 0}>Previous</button>
@@ -866,7 +923,11 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser }) {
     );
 }
 
-const MonitoringTable = ({ formData, handleInputChange }) => {
+type MonitoringTableProps = {
+    formData: any;
+    handleInputChange: (fieldId: string, value: any) => void;
+};
+const MonitoringTable = ({ formData, handleInputChange }: MonitoringTableProps) => {
     const days = Array.from({ length: 14 }, (_, i) => i + 1);
     const times = ['Morning', 'Afternoon', 'Night'];
 
@@ -889,7 +950,7 @@ const MonitoringTable = ({ formData, handleInputChange }) => {
                                         type="text"
                                         aria-label={`Day ${day} ${time}`}
                                         value={formData[`glucose_day${day}_${time.toLowerCase()}`] || ''}
-                                        onChange={e => handleInputChange(5, `glucose_day${day}_${time.toLowerCase()}`, e.target.value)}
+                                        onChange={e => handleInputChange(`glucose_day${day}_${time.toLowerCase()}`, e.target.value)}
                                     />
                                 </td>
                             ))}
@@ -901,7 +962,11 @@ const MonitoringTable = ({ formData, handleInputChange }) => {
     );
 };
 
-const ProgressBar = ({ currentStep, steps }) => (
+type ProgressBarProps = {
+    currentStep: number;
+    steps: string[];
+};
+const ProgressBar = ({ currentStep, steps }: ProgressBarProps) => (
     <div className="progress-bar">
         {steps.map((step, index) => (
             <div key={index} className={`progress-step ${index === currentStep ? 'active' : ''} ${index < currentStep ? 'completed' : ''}`}>
@@ -915,8 +980,13 @@ const ProgressBar = ({ currentStep, steps }) => (
 
 // --- AUTH COMPONENTS ---
 
-function InvitationSignUpPage({ token, showNotification, onSignedUp }) {
-    const [invitation, setInvitation] = useState(null);
+type InvitationSignUpPageProps = {
+    token: string;
+    showNotification: (message: string, type: 'success' | 'error') => void;
+    onSignedUp: () => void;
+};
+function InvitationSignUpPage({ token, showNotification, onSignedUp }: InvitationSignUpPageProps) {
+    const [invitation, setInvitation] = useState<Invitation | null>(null);
     const [name, setName] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(true);
@@ -926,7 +996,7 @@ function InvitationSignUpPage({ token, showNotification, onSignedUp }) {
         const fetchInvitation = async () => {
             const { data, error } = await supabase
                 .from('invitations')
-                .select('*')
+                .select('email, role, centerId')
                 .eq('token', token)
                 .single();
 
@@ -940,8 +1010,10 @@ function InvitationSignUpPage({ token, showNotification, onSignedUp }) {
         fetchInvitation();
     }, [token]);
 
-    const handleSignUp = async (e) => {
+    const handleSignUp = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (!invitation) return;
+
         setLoading(true);
         setError('');
 
@@ -971,13 +1043,14 @@ function InvitationSignUpPage({ token, showNotification, onSignedUp }) {
         }
     };
     
-    if (loading && !error) return <LoadingSpinner />;
+    if (loading) return <LoadingSpinner />;
 
     return (
         <div className="auth-container">
             <div className="auth-form">
                 <h1>Complete Your Registration</h1>
-                {error ? <p className="error-message">{error}</p> : (
+                {error ? <p className="error-message">{error}</p> : 
+                invitation ? (
                 <form onSubmit={handleSignUp}>
                     <p>Welcome! Create your account to join the platform.</p>
                      <div className="form-group">
@@ -996,21 +1069,25 @@ function InvitationSignUpPage({ token, showNotification, onSignedUp }) {
                         {loading ? 'Signing Up...' : 'Sign Up'}
                     </button>
                 </form>
-                )}
+                ) : null}
             </div>
         </div>
     );
 }
 
-function AuthPage({ hasAdmin, onAdminCreated }) {
-    const [mode, setMode] = useState<'login' | 'signup' | 'admin_signup'>(hasAdmin ? 'login' : 'admin_signup');
+type AuthPageProps = {
+    hasAdmin: boolean;
+    onAdminCreated: () => void;
+};
+function AuthPage({ hasAdmin, onAdminCreated }: AuthPageProps) {
+    const mode = hasAdmin ? 'login' : 'admin_signup';
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const handleLogin = async (e) => {
+    const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError('');
@@ -1019,7 +1096,7 @@ function AuthPage({ hasAdmin, onAdminCreated }) {
         setLoading(false);
     };
 
-    const handleAdminSignUp = async (e) => {
+    const handleAdminSignUp = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
         setError('');
@@ -1116,7 +1193,7 @@ function App() {
     const params = new URLSearchParams(urlHash.substring(urlHash.indexOf('?')));
     const invitationToken = params.get('token');
 
-    const showNotification = useCallback((message, type: 'success' | 'error') => {
+    const showNotification = useCallback((message: string, type: 'success' | 'error') => {
         const newNotif = { id: Date.now(), message, type };
         setNotifications(prev => [...prev, newNotif]);
     }, []);
@@ -1266,3 +1343,4 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>,
 );
+
