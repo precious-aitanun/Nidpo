@@ -1225,7 +1225,7 @@ function App() {
 
             if (profileError) {
                 showNotification("Could not fetch user profile.", "error");
-                supabase.auth.signOut();
+                await supabase.auth.signOut();
                 return;
             }
 
@@ -1244,8 +1244,25 @@ function App() {
                 });
             }
         };
-        
-        checkAdminExists();
+
+        const initializeSession = async () => {
+            await checkAdminExists();
+            
+            const { data: { session }, error } = await supabase.auth.getSession();
+            if (error) {
+                showNotification("Failed to initialize session.", "error");
+                setLoading(false);
+                return;
+            }
+
+            setSession(session);
+            if (session?.user) {
+                await fetchInitialData(session.user);
+            }
+            setLoading(false);
+        };
+
+        initializeSession();
 
         const { data: authListener } = supabase.auth.onAuthStateChange(
             async (_event, session) => {
@@ -1256,7 +1273,6 @@ function App() {
                     setCurrentUser(null);
                     await checkAdminExists();
                 }
-                setLoading(false);
             }
         );
 
@@ -1343,4 +1359,3 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>,
 );
-
