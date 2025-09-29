@@ -839,16 +839,41 @@ type AddPatientPageProps = {
     currentUser: UserProfile;
     editingPatient?: Patient | null;
 };
+
 function AddPatientPage({ showNotification, onPatientAdded, currentUser, editingPatient = null }: AddPatientPageProps) {
     const [currentStep, setCurrentStep] = useState(0);
     const [formData, setFormData] = useState<any>(editingPatient?.formData || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [draftId, setDraftId] = useState<number | null>(null);
 
     useEffect(() => {
         if (editingPatient) {
             setFormData(editingPatient.formData || {});
         }
     }, [editingPatient]);
+
+    // Load draft if exists for new patient
+    useEffect(() => {
+        const loadDraft = async () => {
+            if (editingPatient) return; // Don't load draft when editing existing patient
+            
+            const { data, error } = await supabase
+                .from('drafts')
+                .select('*')
+                .eq('user_id', currentUser.id)
+                .order('updated_at', { ascending: false })
+                .limit(1)
+                .maybeSingle();
+
+            if (data && !error) {
+                setFormData(data.form_data || {});
+                setDraftId(data.id);
+                showNotification('Draft loaded automatically', 'success');
+            }
+        };
+        loadDraft();
+    }, [currentUser.id, editingPatient, showNotification]);
 
     const handleInputChange = (fieldId: string, value: any) => {
         setFormData((prev: any) => ({
@@ -868,8 +893,87 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
     const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, formStructure.length - 1));
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 0));
 
+
+    // Validate all required fields
+    const validateForm = (): { isValid: boolean; missingFields: string[] } => {
+        const missingFields: string[] = [];
+        
+        formStructure.forEach(section => {
+            section.fields.forEach(field => {
+                // Skip if conditional field and condition not met
+                if (field.condition && !field.condition(formData)) {
+                    return;
+                }
+                
+                // Check required fields
+                if (field.required) {
+                    const value = formData[field.id];
+                    if (value === undefined || value === null || value === '' || 
+                        (Array.isArray(value) && value.length === 0)) {
+                        missingFields.push(`${section.title}: ${field.label}`);
+                    }
+                }
+            });
+        });
+        
+        return {
+            isValid: missingFields.length === 0,
+            missingFields
+        };
+    };
+
+    // Save as draft
+    const handleSaveDraft = async () => {
+        if (!formData.serialNumber) {
+            showNotification('Please enter a Serial Number/Institutional Code before saving draft', 'error');
+            return;
+        }
+
+        setIsSaving(true);
+        
+        const draftData = {
+            user_id: currentUser.id,
+            center_id: currentUser.role === 'admin' && formData.centerId 
+                ? parseInt(formData.centerId) 
+                : currentUser.centerId,
+            patient_id: formData.serialNumber,
+            form_data: formData,
+            updated_at: new Date().toISOString()
+        };
+
+        const { data, error } = await supabase
+            .from('drafts')
+            .upsert(draftData, { 
+                onConflict: 'user_id,patient_id,center_id',
+                ignoreDuplicates: false 
+            })
+            .select()
+            .single();
+
+        setIsSaving(false);
+
+        if (error) {
+            showNotification(`Error saving draft: ${error.message}`, 'error');
+        } else {
+            setDraftId(data.id);
+            showNotification('Draft saved successfully!', 'success');
+        }
+    };
+
+    // Submit final form
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        // Validate all required fields
+        const validation = validateForm();
+        if (!validation.isValid) {
+            showNotification(
+                `Please complete all required fields before submitting. Missing: ${validation.missingFields.slice(0, 3).join(', ')}${validation.missingFields.length > 3 ? '...' : ''}`,
+                'error'
+            );
+            return;
+        }
+
         setIsSubmitting(true);
         
         const coreData = {
@@ -903,11 +1007,24 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                 formData: formData,
             });
 
-            setIsSubmitting(false);
             if (error) {
+                setIsSubmitting(false);
                 showNotification(`Error saving patient data: ${error.message}`, 'error');
             } else {
-                showNotification('Patient data saved successfully!', 'success');
+                // Delete draft after successful submission
+                if (draftId) {
+                    await supabase.from('drafts').delete().eq('id', draftId);
+                } else {
+                    // Try to delete by patient_id if draftId not available
+                    await supabase
+                        .from('drafts')
+                        .delete()
+                        .eq('user_id', currentUser.id)
+                        .eq('patient_id', formData.serialNumber);
+                }
+                
+                setIsSubmitting(false);
+                showNotification('Patient data submitted successfully!', 'success');
                 onPatientAdded();
             }
         }
@@ -981,15 +1098,25 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                     <div className="form-step-fields">
                         {formStructure[currentStep].fields.map((field) => renderField(field))}
                     </div>
-                     <div className="form-navigation">
+                    <div className="form-navigation">
                         <button type="button" className="btn btn-secondary" onClick={prevStep} disabled={currentStep === 0}>Previous</button>
                         <div className="form-navigation-steps">
                             {currentStep < formStructure.length - 1 ? (
                                 <button type="button" className="btn" onClick={nextStep}>Next</button>
                             ) : (
-                                <button type="submit" className="btn" disabled={isSubmitting}>
-                                    {isSubmitting ? 'Submitting...' : editingPatient ? 'Update Form' : 'Submit Form'}
-                                </button>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-secondary" 
+                                        onClick={handleSaveDraft}
+                                        disabled={isSaving || !formData.serialNumber}
+                                    >
+                                        {isSaving ? 'Saving...' : 'Save Draft'}
+                                    </button>
+                                    <button type="submit" className="btn" disabled={isSubmitting}>
+                                        {isSubmitting ? 'Submitting...' : editingPatient ? 'Update Form' : 'Submit Form'}
+                                    </button>
+                                </div>
                             )}
                         </div>
                     </div>
