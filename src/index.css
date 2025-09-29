@@ -596,6 +596,37 @@ tbody tr:hover {
     box-shadow: 0 0 0 2px rgba(0, 90, 156, 0.2);
 }
 
+.actions-cell {
+  text-align: center;
+}
+
+.btn-icon {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0.5rem;
+  color: var(--primary-color, #4f46e5);
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-icon:hover {
+  background-color: rgba(79, 70, 229, 0.1);
+  border-radius: 0.25rem;
+  transform: scale(1.1);
+}
+
+.btn-icon:active {
+  transform: scale(0.95);
+}
+
+.btn-icon svg {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+
 /* --- Mobile / Responsive --- */
 .mobile-menu-btn {
     display: none;
@@ -650,3 +681,4 @@ tbody tr:hover {
         grid-template-columns: 1fr;
     }
 }
+
