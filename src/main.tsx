@@ -330,6 +330,7 @@ const IconLogout = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentCol
 const IconPlus = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>;
 const IconExport = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>;
 const IconMenu = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>;
+const IconEdit = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>;
 
 // --- LAYOUT COMPONENTS ---
 
@@ -339,8 +340,9 @@ type SidebarProps = {
     userRole: UserProfile['role'];
     isOpen: boolean;
     setIsOpen: (isOpen: boolean) => void;
+    onNavigate: (page: string) => void;
 };
-function Sidebar({ currentPage, setCurrentPage, userRole, isOpen, setIsOpen }: SidebarProps) {
+function Sidebar({ currentPage, setCurrentPage, userRole, isOpen, setIsOpen, onNavigate }: SidebarProps) {
     const navLinks = [
         { name: 'Dashboard', icon: <IconDashboard />, page: 'dashboard', roles: ['admin', 'researcher', 'data-entry'] },
         { name: 'Patients', icon: <IconPatients />, page: 'patients', roles: ['admin', 'researcher', 'data-entry'] },
@@ -350,8 +352,8 @@ function Sidebar({ currentPage, setCurrentPage, userRole, isOpen, setIsOpen }: S
     ];
 
     const handleNav = (page: string) => {
-        setCurrentPage(page);
-        setIsOpen(false); // Close sidebar on navigation on mobile
+        onNavigate(page);
+        setIsOpen(false);
     };
 
     return (
@@ -428,36 +430,35 @@ const DashboardPage = ({ stats }: DashboardPageProps) => (
 type PatientsPageProps = {
     currentUser: UserProfile;
     showNotification: (message: string, type: 'success' | 'error') => void;
+    onEditPatient: (patient: Patient) => void;
 };
-function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
+function PatientsPage({ currentUser, showNotification, onEditPatient }: PatientsPageProps) {
     const [patients, setPatients] = useState<Patient[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
-
     useEffect(() => {
-    const fetchPatients = async () => {
-    setLoading(true);
-    
-    // Explicitly list fields instead of using *
-    let query = supabase
-        .from('patients')
-        .select('*');
-    
-    if (currentUser.role !== 'admin') {
-        query = query.eq('centerId', currentUser.centerId);
-    }
+        const fetchPatients = async () => {
+            setLoading(true);
+            
+            let query = supabase
+                .from('patients')
+                .select('*, centers(name)');
+            
+            if (currentUser.role !== 'admin') {
+                query = query.eq('centerId', currentUser.centerId);
+            }
 
-    const { data, error } = await query.order('dateAdded', { ascending: false });
+            const { data, error } = await query.order('dateAdded', { ascending: false });
 
-      if (error) {
-        showNotification('Error fetching patients: ' + error.message, 'error');
-        console.error(`Fetch error (center ${currentUser.centerId}):`, error);
-      } else {
-        setPatients(data as Patient[]);
-      }
-      setLoading(false);
-    };
+            if (error) {
+                showNotification('Error fetching patients: ' + error.message, 'error');
+                console.error(`Fetch error (center ${currentUser.centerId}):`, error);
+            } else {
+                setPatients(data as Patient[]);
+            }
+            setLoading(false);
+        };
         fetchPatients();
     }, [currentUser, showNotification]);
 
@@ -468,28 +469,62 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
     }, [patients, searchTerm]);
     
     const exportToCsv = () => {
-        const headers = ['Patient ID', 'Age', 'Sex', 'Center', 'Date Added'];
-        const rows = filteredPatients.map(p => [
-            p.patientId,
-            p.age,
-            p.sex,
-            p.centers?.name || 'N/A',
-            p.dateAdded
-        ]);
+        const allFormFields: string[] = [];
+        formStructure.forEach(section => {
+            section.fields.forEach(field => {
+                if (field.type !== 'monitoring_table') {
+                    allFormFields.push(field.id);
+                } else {
+                    for (let day = 1; day <= 14; day++) {
+                        ['morning', 'afternoon', 'night'].forEach(time => {
+                            allFormFields.push(`glucose_day${day}_${time}`);
+                        });
+                    }
+                }
+            });
+        });
+
+        const headers = ['Patient ID', 'Age', 'Sex', 'Center', 'Date Added', ...allFormFields];
+        
+        const rows = filteredPatients.map(p => {
+            const baseData = [
+                p.patientId,
+                p.age,
+                p.sex,
+                p.centers?.name || 'N/A',
+                p.dateAdded
+            ];
+            
+            const formDataValues = allFormFields.map(fieldId => {
+                const value = p.formData?.[fieldId];
+                if (value === undefined || value === null) return '';
+                if (Array.isArray(value)) return value.join('; ');
+                return value;
+            });
+            
+            return [...baseData, ...formDataValues];
+        });
+
+        const escapeCsvField = (field: any) => {
+            const str = String(field);
+            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+                return `"${str.replace(/"/g, '""')}"`;
+            }
+            return str;
+        };
 
         let csvContent = "data:text/csv;charset=utf-8," 
-            + headers.join(",") + "\n" 
-            + rows.map(e => e.join(",")).join("\n");
+            + headers.map(escapeCsvField).join(",") + "\n" 
+            + rows.map(row => row.map(escapeCsvField).join(",")).join("\n");
 
         const encodedUri = encodeURI(csvContent);
         const link = document.createElement("a");
         link.setAttribute("href", encodedUri);
-        link.setAttribute("download", "patients_export.csv");
+        link.setAttribute("download", `patients_export_${new Date().toISOString().split('T')[0]}.csv`);
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
     }
-
 
     if (loading) return <LoadingSpinner />;
 
@@ -523,7 +558,7 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
                                 <th>Sex</th>
                                 <th>Center</th>
                                 <th>Date Added</th>
-                                {/*<th>Actions</th>*/}
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -534,10 +569,15 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
                                     <td>{patient.sex}</td>
                                     <td>{patient.centers?.name || 'N/A'}</td>
                                     <td>{new Date(patient.dateAdded).toLocaleDateString()}</td>
-                                   {/* <td className="actions-cell">
-                                        <button aria-label={`Edit patient ${patient.patientId}`}><IconEdit /></button>
-                                        <button aria-label={`Delete patient ${patient.patientId}`}><IconDelete /></button>
-                                    </td> */}
+                                    <td className="actions-cell">
+                                        <button 
+                                            onClick={() => onEditPatient(patient)}
+                                            aria-label={`Edit patient ${patient.patientId}`}
+                                            className="btn-icon"
+                                        >
+                                            <IconEdit />
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -623,34 +663,33 @@ function UsersPage({ showNotification }: UsersPageProps) {
     const [invitationLink, setInvitationLink] = useState('');
     const [showLinkModal, setShowLinkModal] = useState(false);
 
-  useEffect(() => {
-  const fetchData = async () => {
-    setLoading(true);
+    useEffect(() => {
+        const fetchData = async () => {
+            setLoading(true);
 
-    const [usersRes, centersRes] = await Promise.all([
-      supabase.from('profiles').select('*, centers(name)'),
-      supabase.from('centers').select('*')
-    ]);
+            const [usersRes, centersRes] = await Promise.all([
+                supabase.from('profiles').select('*, centers(name)'),
+                supabase.from('centers').select('*')
+            ]);
 
-    if (usersRes.error) {
-      showNotification('Error fetching users: ' + usersRes.error.message, 'error');
-    } else {
-      setUsers(usersRes.data as UserProfile[]);
-    }
+            if (usersRes.error) {
+                showNotification('Error fetching users: ' + usersRes.error.message, 'error');
+            } else {
+                setUsers(usersRes.data as UserProfile[]);
+            }
 
-    if (centersRes.error) {
-      showNotification('Error fetching centers: ' + centersRes.error.message, 'error');
-    } else {
-      setCenters(centersRes.data as Center[]);
-    }
+            if (centersRes.error) {
+                showNotification('Error fetching centers: ' + centersRes.error.message, 'error');
+            } else {
+                setCenters(centersRes.data as Center[]);
+            }
 
-    setLoading(false);
-  };
+            setLoading(false);
+        };
 
-  fetchData();
-}, [showNotification]);
+        fetchData();
+    }, [showNotification]);
 
-    
     const handleInviteUser = async (newUserData: AddUserFormData) => {
         const { data, error } = await supabase
             .from('invitations')
@@ -676,7 +715,6 @@ function UsersPage({ showNotification }: UsersPageProps) {
         setShowLinkModal(true);
         showNotification('Invitation link generated successfully.', 'success');
     };
-    
 
     if (loading) return <LoadingSpinner />;
 
@@ -750,21 +788,21 @@ function CentersPage({ showNotification }: CentersPageProps) {
     const [centers, setCenters] = useState<Center[]>([]);
     const [loading, setLoading] = useState(true);
 
-
     useEffect(() => {
-  const fetchCenters = async () => {
-    setLoading(true);
-    const { data, error } = await supabase.from('centers').select('*');
-    if (error) {
-      showNotification('Error fetching centers: ' + error.message, 'error');
-    } else {
-      setCenters(data as Center[]);
-    }
-    setLoading(false);
-  };
+        const fetchCenters = async () => {
+            setLoading(true);
+            const { data, error } = await supabase.from('centers').select('*');
+            if (error) {
+                showNotification('Error fetching centers: ' + error.message, 'error');
+            } else {
+                setCenters(data as Center[]);
+            }
+            setLoading(false);
+        };
 
-  fetchCenters();
-}, [showNotification]);
+        fetchCenters();
+    }, [showNotification]);
+    
     if (loading) return <LoadingSpinner />;
 
     return (
@@ -800,12 +838,18 @@ type AddPatientPageProps = {
     showNotification: (message: string, type: 'success' | 'error') => void;
     onPatientAdded: () => void;
     currentUser: UserProfile;
+    editingPatient?: Patient | null;
 };
-function AddPatientPage({ showNotification, onPatientAdded, currentUser }: AddPatientPageProps) {
+function AddPatientPage({ showNotification, onPatientAdded, currentUser, editingPatient = null }: AddPatientPageProps) {
     const [currentStep, setCurrentStep] = useState(0);
-    // Fix: Specify `any` type for formData state to allow dynamic properties and prevent errors on access.
-    const [formData, setFormData] = useState<any>({});
+    const [formData, setFormData] = useState<any>(editingPatient?.formData || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
+
+    useEffect(() => {
+        if (editingPatient) {
+            setFormData(editingPatient.formData || {});
+        }
+    }, [editingPatient]);
 
     const handleInputChange = (fieldId: string, value: any) => {
         setFormData((prev: any) => ({
@@ -838,17 +882,35 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser }: AddPa
             : currentUser.centerId,
         };
 
-        const { error } = await supabase.from('patients').insert({
-            ...coreData,
-            formData: formData, // Store the complete form data in the JSONB column
-        });
+        if (editingPatient) {
+            const { error } = await supabase
+                .from('patients')
+                .update({
+                    ...coreData,
+                    formData: formData,
+                })
+                .eq('id', editingPatient.id);
 
-        setIsSubmitting(false);
-        if (error) {
-            showNotification(`Error saving patient data: ${error.message}`, 'error');
+            setIsSubmitting(false);
+            if (error) {
+                showNotification(`Error updating patient data: ${error.message}`, 'error');
+            } else {
+                showNotification('Patient data updated successfully!', 'success');
+                onPatientAdded();
+            }
         } else {
-            showNotification('Patient data saved successfully!', 'success');
-            onPatientAdded();
+            const { error } = await supabase.from('patients').insert({
+                ...coreData,
+                formData: formData,
+            });
+
+            setIsSubmitting(false);
+            if (error) {
+                showNotification(`Error saving patient data: ${error.message}`, 'error');
+            } else {
+                showNotification('Patient data saved successfully!', 'success');
+                onPatientAdded();
+            }
         }
     };
 
@@ -908,7 +970,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser }: AddPa
     return (
         <div className="form-page-container">
             <div className="page-header">
-                <h1>Add New Patient Data</h1>
+                <h1>{editingPatient ? 'Edit Patient Data' : 'Add New Patient Data'}</h1>
             </div>
             <div className="form-content-wrapper">
                  <ProgressBar currentStep={currentStep} steps={formStructure.map(s => s.title)} />
@@ -927,7 +989,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser }: AddPa
                                 <button type="button" className="btn" onClick={nextStep}>Next</button>
                             ) : (
                                 <button type="submit" className="btn" disabled={isSubmitting}>
-                                    {isSubmitting ? 'Submitting...' : 'Submit Form'}
+                                    {isSubmitting ? 'Submitting...' : editingPatient ? 'Update Form' : 'Submit Form'}
                                 </button>
                             )}
                         </div>
@@ -1026,43 +1088,44 @@ function InvitationSignUpPage({ token, showNotification, onSignedUp }: Invitatio
     }, [token]);
 
     const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!invitation) return;
+        e.preventDefault();
+        if (!invitation) return;
 
-    setLoading(true);
-    setError('');
+        setLoading(true);
+        setError('');
 
-    try {
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-            email: invitation.email,
-            password: password,
-            options: {
-                data: {
-                    name: name,
-                    role: invitation.role,
-                    centerId: invitation.centerId
+        try {
+            const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+                email: invitation.email,
+                password: password,
+                options: {
+                    data: {
+                        name: name,
+                        role: invitation.role,
+                        centerId: invitation.centerId
+                    }
                 }
+            });
+            
+            if (signUpError) {
+                setError(signUpError.message);
+                setLoading(false);
+                return;
             }
-        });
-        
-        if (signUpError) {
-            setError(signUpError.message);
-            setLoading(false);
-            return;
-        }
 
-        if (signUpData.user) {
-            await supabase.rpc('delete_invitation', { invitation_token: token });
-            showNotification('Sign up successful! Please check your email for verification.', 'success');
-            onSignedUp();
+            if (signUpData.user) {
+                await supabase.rpc('delete_invitation', { invitation_token: token });
+                showNotification('Sign up successful! Please check your email for verification.', 'success');
+                onSignedUp();
+            }
+        } catch (err) {
+            setError('An unexpected error occurred.');
+            console.error('Sign up error:', err);
+        } finally {
+            setLoading(false);
         }
-    } catch (err) {
-        setError('An unexpected error occurred.');
-        console.error('Sign up error:', err);
-    } finally {
-        setLoading(false);
-    }
-};
+    };
+    
     if (loading) return <LoadingSpinner />;
 
     return (
@@ -1207,8 +1270,8 @@ function App() {
     const [stats, setStats] = useState({ patients: 0, users: 0, centers: 0 });
     const [notifications, setNotifications] = useState<NotificationType[]>([]);
     const [isSidebarOpen, setSidebarOpen] = useState(false);
+    const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
 
-    // Check for invitation token in URL
     const urlHash = window.location.hash;
     const params = new URLSearchParams(urlHash.substring(urlHash.indexOf('?')));
     const invitationToken = params.get('token');
@@ -1219,113 +1282,131 @@ function App() {
     }, []);
 
     const handleSignedUp = () => {
-         // Clear the token from the URL
         window.location.hash = '/';
-        // Force a re-check of auth state, which will show login page
         setSession(null); 
     };
 
     useEffect(() => {
-    const checkAdminExists = async () => {
-        const { data, error } = await supabase.from('profiles').select('id').eq('role', 'admin').limit(1);
-        if (error) {
-            console.error("Error checking for admin:", error);
-            setHasAdmin(true);
-        } else {
-            setHasAdmin(data.length > 0);
-        }
-    };
-
-    const fetchInitialData = async (user: User) => {
-        try {
-            const { data: profile, error: profileError } = await supabase
+        const checkAdminExists = async () => {
+            const { data, error } = await supabase
                 .from('profiles')
-                .select('*, centers(name)')
-                .eq('id', user.id)
-                .single();
-
-            if (profileError) {
-                showNotification("Could not fetch user profile.", "error");
-                await supabase.auth.signOut();
-                return;
-            }
-
-            setCurrentUser(profile as UserProfile);
-            setLoading(false);
-
-            // Fetch stats in background for admin
-            if (profile.role === 'admin') {
-                Promise.all([
-                    supabase.from('patients').select('id', { count: 'exact', head: true }),
-                    supabase.from('profiles').select('id', { count: 'exact', head: true }),
-                    supabase.from('centers').select('id', { count: 'exact', head: true }),
-                ]).then(([patientsRes, usersRes, centersRes]) => {
-                    setStats({
-                        patients: patientsRes.count || 0,
-                        users: usersRes.count || 0,
-                        centers: centersRes.count || 0
-                    });
-                }).catch(err => console.error("Error fetching stats:", err));
-            }
-        } catch (error) {
-            console.error("Error in fetchInitialData:", error);
-            setLoading(false);
-        }
-    };
-
-    const initializeSession = async () => {
-        try {
-            const { data: { session }, error } = await supabase.auth.getSession();
+                .select('id')
+                .eq('role', 'admin')
+                .limit(1)
+                .maybeSingle();
             
             if (error) {
-                showNotification("Failed to initialize session.", "error");
-                setLoading(false);
-                return;
-            }
-
-            if (!session) {
-                await checkAdminExists();
-                setLoading(false);
-                return;
-            }
-
-            setSession(session);
-            
-            if (session?.user) {
-                await fetchInitialData(session.user); // Don't await
+                console.error("Error checking for admin:", error);
+                setHasAdmin(false);
             } else {
+                setHasAdmin(data !== null);
+            }
+        };
+
+        const fetchInitialData = async (user: User) => {
+            try {
+                const { data: profile, error: profileError } = await supabase
+                    .from('profiles')
+                    .select('*, centers(name)')
+                    .eq('id', user.id)
+                    .single();
+
+                if (profileError) {
+                    showNotification("Could not fetch user profile.", "error");
+                    await supabase.auth.signOut();
+                    return;
+                }
+
+                setCurrentUser(profile as UserProfile);
+                setLoading(false);
+
+                if (profile.role === 'admin') {
+                    Promise.all([
+                        supabase.from('patients').select('id', { count: 'exact', head: true }),
+                        supabase.from('profiles').select('id', { count: 'exact', head: true }),
+                        supabase.from('centers').select('id', { count: 'exact', head: true }),
+                    ]).then(([patientsRes, usersRes, centersRes]) => {
+                        setStats({
+                            patients: patientsRes.count || 0,
+                            users: usersRes.count || 0,
+                            centers: centersRes.count || 0
+                        });
+                    }).catch(err => console.error("Error fetching stats:", err));
+                }
+            } catch (error) {
+                console.error("Error in fetchInitialData:", error);
                 setLoading(false);
             }
-        } catch (error) {
-            console.error("Error initializing session:", error);
-            setLoading(false);
-        }
-    };
+        };
 
-    initializeSession();
+        const initializeSession = async () => {
+            try {
+                const { data: { session }, error } = await supabase.auth.getSession();
+                
+                if (error) {
+                    showNotification("Failed to initialize session.", "error");
+                    setLoading(false);
+                    return;
+                }
 
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-        async (_event, session) => {
-            setSession(session);
-            if (session?.user) {
-                fetchInitialData(session.user);
-            } else {
-                setCurrentUser(null);
-                await checkAdminExists();
+                if (!session) {
+                    await checkAdminExists();
+                    setLoading(false);
+                    return;
+                }
+
+                setSession(session);
+                
+                if (session?.user) {
+                    await fetchInitialData(session.user);
+                } else {
+                    setLoading(false);
+                }
+            } catch (error) {
+                console.error("Error initializing session:", error);
+                setLoading(false);
             }
-        }
-    );
+        };
 
-    return () => {
-        authListener.subscription.unsubscribe();
-    };
-}, [showNotification]);
+        initializeSession();
 
+        const { data: authListener } = supabase.auth.onAuthStateChange(
+            async (_event, session) => {
+                setSession(session);
+                if (session?.user) {
+                    fetchInitialData(session.user);
+                } else {
+                    setCurrentUser(null);
+                    await checkAdminExists();
+                }
+            }
+        );
 
+        return () => {
+            authListener.subscription.unsubscribe();
+        };
+    }, [showNotification]);
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
         setCurrentPage('dashboard');
+    };
+
+    const handleEditPatient = (patient: Patient) => {
+        setEditingPatient(patient);
+        setCurrentPage('add_patient');
+    };
+
+    const handlePatientSaved = () => {
+        setEditingPatient(null);
+        setCurrentPage('patients');
+    };
+
+    const handleNavigate = (page: string) => {
+        if (page === 'add_patient') {
+            setEditingPatient(null);
+        }
+        setCurrentPage(page);
     };
 
     if (loading) {
@@ -1348,23 +1429,27 @@ function App() {
         }}/>;
     }
 
-    // Show loading if we have session but profile hasn't loaded
-if (session && !currentUser) {
-    return <LoadingSpinner />;
-}
+    if (session && !currentUser) {
+        return <LoadingSpinner />;
+    }
     
     const renderPage = () => {
         switch (currentPage) {
             case 'dashboard':
                 return <DashboardPage stats={stats} />;
             case 'patients':
-                return <PatientsPage currentUser={currentUser} showNotification={showNotification} />;
+                return <PatientsPage currentUser={currentUser} showNotification={showNotification} onEditPatient={handleEditPatient} />;
             case 'add_patient':
                  if (!['admin', 'data-entry', 'researcher'].includes(currentUser.role)) {
-                    setCurrentPage('dashboard'); // Redirect if no access
+                    setCurrentPage('dashboard');
                     return <DashboardPage stats={stats} />;
                 }
-                return <AddPatientPage showNotification={showNotification} onPatientAdded={() => setCurrentPage('patients')} currentUser={currentUser} />;
+                return <AddPatientPage 
+                    showNotification={showNotification} 
+                    onPatientAdded={handlePatientSaved} 
+                    currentUser={currentUser}
+                    editingPatient={editingPatient}
+                />;
             case 'users':
                 if (currentUser.role !== 'admin') return <DashboardPage stats={stats} />;
                 return <UsersPage showNotification={showNotification} />;
@@ -1385,6 +1470,7 @@ if (session && !currentUser) {
                 userRole={currentUser.role}
                 isOpen={isSidebarOpen}
                 setIsOpen={setSidebarOpen}
+                onNavigate={handleNavigate}
             />
             <main className="main-content">
                 <Header 
