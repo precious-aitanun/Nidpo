@@ -331,6 +331,9 @@ const IconPlus = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor
 const IconExport = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" /></svg>;
 const IconMenu = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" /></svg>;
 const IconEdit = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>;
+const IconDrafts = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" /></svg>;
+const IconTrash = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>;
+
 
 // --- LAYOUT COMPONENTS ---
 
@@ -346,6 +349,7 @@ function Sidebar({ currentPage, userRole, isOpen, setIsOpen, onNavigate }: Sideb
         { name: 'Dashboard', icon: <IconDashboard />, page: 'dashboard', roles: ['admin', 'researcher', 'data-entry'] },
         { name: 'Patients', icon: <IconPatients />, page: 'patients', roles: ['admin', 'researcher', 'data-entry'] },
         { name: 'Add Patient', icon: <IconPlus />, page: 'add_patient', roles: ['admin', 'data-entry', 'researcher'] },
+        { name: 'Drafts', icon: <IconDrafts />, page: 'drafts', roles: ['admin', 'data-entry', 'researcher'] },
         { name: 'Users', icon: <IconUsers />, page: 'users', roles: ['admin'] },
         { name: 'Centers', icon: <IconCenters />, page: 'centers', roles: ['admin'] },
     ];
@@ -371,6 +375,117 @@ function Sidebar({ currentPage, userRole, isOpen, setIsOpen, onNavigate }: Sideb
                 </a>
             ))}
         </nav>
+    );
+}
+
+type DraftsPageProps = {
+    currentUser: UserProfile;
+    showNotification: (message: string, type: 'success' | 'error') => void;
+    onEditDraft: (draft: any) => void;
+};
+function DraftsPage({ currentUser, showNotification, onEditDraft }: DraftsPageProps) {
+    const [drafts, setDrafts] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    const fetchDrafts = async () => {
+        setLoading(true);
+        
+        let query = supabase
+            .from('drafts')
+            .select('*');
+        
+        if (currentUser.role !== 'admin') {
+            query = query.eq('user_id', currentUser.id);
+        }
+
+        const { data, error } = await query.order('updated_at', { ascending: false });
+
+        if (error) {
+            showNotification('Error fetching drafts: ' + error.message, 'error');
+        } else {
+            setDrafts(data || []);
+        }
+        setLoading(false);
+    };
+
+    useEffect(() => {
+        fetchDrafts();
+    }, [currentUser]);
+
+    const handleDeleteDraft = async (draftId: number) => {
+        if (!confirm('Are you sure you want to delete this draft?')) return;
+
+        const { error } = await supabase
+            .from('drafts')
+            .delete()
+            .eq('id', draftId);
+
+        if (error) {
+            showNotification('Error deleting draft: ' + error.message, 'error');
+        } else {
+            showNotification('Draft deleted successfully', 'success');
+            fetchDrafts();
+        }
+    };
+
+    if (loading) return <LoadingSpinner />;
+
+    return (
+        <div>
+            <div className="page-header">
+                <h1>Draft Forms</h1>
+            </div>
+            {drafts.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>
+                    <p>No drafts found. Drafts are automatically saved when you click "Save Draft" in the patient form.</p>
+                </div>
+            ) : (
+                <div className="table-container">
+                    <div className="table-wrapper">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Patient ID</th>
+                                    <th>Age</th>
+                                    <th>Sex</th>
+                                    <th>Last Updated</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {drafts.map(draft => (
+                                    <tr key={draft.id}>
+                                        <td>{draft.patient_id || 'N/A'}</td>
+                                        <td>{draft.form_data?.age || 'N/A'}</td>
+                                        <td>{draft.form_data?.sex || 'N/A'}</td>
+                                        <td>{new Date(draft.updated_at).toLocaleString()}</td>
+                                        <td className="actions-cell">
+                                            <button 
+                                                onClick={() => onEditDraft(draft)}
+                                                aria-label={`Continue editing draft ${draft.patient_id}`}
+                                                className="btn-icon"
+                                                title="Continue Editing"
+                                            >
+                                                <IconEdit />
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteDraft(draft.id)}
+                                                aria-label={`Delete draft ${draft.patient_id}`}
+                                                className="btn-icon"
+                                                title="Delete Draft"
+                                                style={{ color: '#dc3545' }}
+                                            >
+                                                <IconTrash />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+        </div>
     );
 }
 
@@ -838,26 +953,30 @@ type AddPatientPageProps = {
     onPatientAdded: () => void;
     currentUser: UserProfile;
     editingPatient?: Patient | null;
+    editingDraft?: any | null;
 };
 
-function AddPatientPage({ showNotification, onPatientAdded, currentUser, editingPatient = null }: AddPatientPageProps) {
+function AddPatientPage({ showNotification, onPatientAdded, currentUser, editingPatient = null, editingDraft = null }: AddPatientPageProps) {
     const [currentStep, setCurrentStep] = useState(0);
-    const [formData, setFormData] = useState<any>(editingPatient?.formData || {});
+    const [formData, setFormData] = useState<any>(editingPatient?.formData || editingDraft?.form_data || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
-    const [draftId, setDraftId] = useState<number | null>(null);
+    const [draftId, setDraftId] = useState<number | null>(editingDraft?.id || null);
 
     useEffect(() => {
         if (editingPatient) {
             setFormData(editingPatient.formData || {});
+            setDraftId(null);
+        } else if (editingDraft) {
+            setFormData(editingDraft.form_data || {});
+            setDraftId(editingDraft.id);
         }
-    }, [editingPatient]);
+    }, [editingPatient, editingDraft]);
 
-    // Load draft if exists for new patient
+      // Load draft if exists for new patient
     useEffect(() => {
         const loadDraft = async () => {
-            if (editingPatient) return; // Don't load draft when editing existing patient
-            
+            if (editingPatient || editingDraft) return; // Don't auto-load if already editing something 
             const { data, error } = await supabase
                 .from('drafts')
                 .select('*')
@@ -1397,6 +1516,7 @@ function App() {
     const [notifications, setNotifications] = useState<NotificationType[]>([]);
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
+    const [editingDraft, setEditingDraft] = useState<any | null>(null);
 
     const urlHash = window.location.hash;
     const params = new URLSearchParams(urlHash.substring(urlHash.indexOf('?')));
@@ -1520,21 +1640,30 @@ function App() {
 
     const handleEditPatient = (patient: Patient) => {
         setEditingPatient(patient);
+        setEditingDraft(null);
+        setCurrentPage('add_patient');
+    };
+
+    const handleEditDraft = (draft: any) => {
+        setEditingDraft(draft);
+        setEditingPatient(null);
         setCurrentPage('add_patient');
     };
 
     const handlePatientSaved = () => {
         setEditingPatient(null);
+        setEditingDraft(null);
         setCurrentPage('patients');
     };
 
     const handleNavigate = (page: string) => {
         if (page === 'add_patient') {
             setEditingPatient(null);
+            setEditingDraft(null);
         }
         setCurrentPage(page);
     };
-
+    
     if (loading) {
         return <LoadingSpinner />;
     }
@@ -1575,6 +1704,17 @@ function App() {
                     onPatientAdded={handlePatientSaved} 
                     currentUser={currentUser}
                     editingPatient={editingPatient}
+                    editingDraft={editingDraft}
+                />;
+            case 'drafts':
+                if (!['admin', 'data-entry', 'researcher'].includes(currentUser.role)) {
+                    setCurrentPage('dashboard');
+                    return <DashboardPage stats={stats} />;
+                }
+                return <DraftsPage 
+                    currentUser={currentUser}
+                    showNotification={showNotification}
+                    onEditDraft={handleEditDraft}
                 />;
             case 'users':
                 if (currentUser.role !== 'admin') return <DashboardPage stats={stats} />;
