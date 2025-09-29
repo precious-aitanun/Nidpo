@@ -62,6 +62,7 @@ const formStructure: FormSection[] = [
     {
         title: 'Demographic Data',
         fields: [
+            { id: 'centerId', label: 'Center ID', type: 'number', required: false },
             { id: 'serialNumber', label: 'Serial Number/Institutional Code', type: 'text', required: true },
             { id: 'age', label: 'Age (years)', type: 'number', required: true },
             { id: 'hospitalName', label: 'Hospital Name', type: 'text', required: true },
@@ -820,7 +821,9 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser }: AddPa
             patientId: formData.serialNumber,
             age: formData.age,
             sex: formData.sex,
-            centerId: currentUser.centerId,
+            centerId: currentUser.role === 'admin' && formData.centerId 
+            ? parseInt(formData.centerId) 
+            : currentUser.centerId,
         };
 
         const { error } = await supabase.from('patients').insert({
