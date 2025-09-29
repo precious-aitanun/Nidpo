@@ -449,8 +449,8 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
     const { data, error } = await query.order('dateAdded', { ascending: false });
 
     if (error) {
-        showNotification('Error fetching patients: ' + error.message, 'error' + ' from center' + currentUser.centerId);
-        console.error('Fetch error:', error);
+        showNotification('Error fetching patients: ' + error.message, 'error');
+        console.error(`Fetch error (center ${currentUser.centerId}):`, error);
     } else {
         setPatients(data as Patient[]);
     }
