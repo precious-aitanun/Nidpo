@@ -1343,6 +1343,14 @@ tbody tr:last-child td {
     border-left: none;
     border-right: none;
     border-radius: 0;
+    width: 100%;
+    display: block;
+    min-width: 0;
+  }
+
+  .monitoring-table {
+    min-width: 650px;
+    width: auto;
   }
 
   .monitoring-table th,
