@@ -452,7 +452,7 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
         showNotification('Error fetching patients: ' + error.message, 'error');
         console.error(`Fetch error (center ${currentUser.centerId}):`, error);
     } else {
-        setPatients(data | null);
+        setPatients(data || []);
     }
     setLoading(false);
 }, [currentUser, showNotification]);
