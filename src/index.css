@@ -457,15 +457,30 @@ tbody tr:hover {
   display: flex;
   justify-content: space-between;
   margin-bottom: 2rem;
+  /* Allow horizontal scroll on smaller screens for the progress bar if needed */
+  overflow-x: auto; 
+  padding-bottom: 0.5rem; /* Add some padding for scrollbar if it appears */
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
+  scrollbar-width: none; /* Hide scrollbar for Firefox */
+  -ms-overflow-style: none; /* Hide scrollbar for IE/Edge */
 }
+/* Hide scrollbar for Chrome, Safari, Opera */
+.progress-bar::-webkit-scrollbar {
+    display: none;
+}
+
 .progress-step {
   display: flex;
   flex-direction: column;
   align-items: center;
-  flex-grow: 1;
+  /* Removed flex-grow: 1 to prevent excessive shrinking */
   position: relative;
+  min-width: 60px; /* Give each step a minimum width */
+  text-align: center; /* Center label text */
+  padding: 0 5px; /* Add horizontal padding for spacing */
 }
 .progress-step .step-number {
+  flex-shrink: 0; /* Prevent number from shrinking */
   width: 30px;
   height: 30px;
   border-radius: 50%;
@@ -478,12 +493,24 @@ tbody tr:hover {
   font-weight: bold;
   transition: all 0.3s ease;
   z-index: 2;
+  font-size: 0.9rem; /* Slightly smaller font for numbers */
 }
 .progress-step .step-label {
   font-size: 0.8rem;
   color: var(--text-light-color);
   margin-top: 0.5rem;
   text-align: center;
+  word-break: break-word; /* Allow long words to break */
+}
+@media (max-width: 480px) { /* Even smaller screens */
+    .progress-step .step-label {
+        font-size: 0.7rem; /* Even smaller font for very small screens */
+    }
+    .progress-step .step-number {
+        width: 25px;
+        height: 25px;
+        font-size: 0.8rem;
+    }
 }
 .progress-step.active .step-number {
   background-color: var(--primary-color);
@@ -498,16 +525,18 @@ tbody tr:hover {
 .progress-step:not(:last-child)::after {
   content: '';
   position: absolute;
-  top: 15px;
+  top: 15px; /* Align with center of step number */
   left: 50%;
-  width: 100%;
+  width: 100%; /* Adjust width to connect steps properly */
   height: 2px;
   background-color: var(--border-color);
   z-index: 1;
+  transform: translateX(-50%); /* Center the line */
 }
 .progress-step.completed:not(:last-child)::after {
     background-color: var(--success-color);
 }
+
 .form-step-fields {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -560,7 +589,7 @@ tbody tr:hover {
 
 /* --- Monitoring Table --- */
 .monitoring-table-wrapper {
-    overflow-x: auto;
+    overflow-x: auto; /* Ensures horizontal scrolling if content overflows */
     margin-bottom: 1.5rem;
     border: 1px solid var(--border-color);
     border-radius: var(--border-radius);
@@ -568,12 +597,13 @@ tbody tr:hover {
 .monitoring-table {
     width: 100%;
     border-collapse: collapse;
+    min-width: 600px; /* Ensure table has a minimum width to trigger scroll on smaller screens */
 }
 .monitoring-table th, .monitoring-table td {
-    padding: 0.75rem;
+    padding: 0.75rem 0.5rem; /* Reduced padding */
     text-align: center;
     border: 1px solid var(--border-color);
-    min-width: 80px;
+    min-width: 70px; /* Slightly reduced min-width for columns */
 }
 .monitoring-table th {
     background-color: var(--background-color);
@@ -582,18 +612,38 @@ tbody tr:hover {
     font-weight: 500;
     text-align: left;
     background-color: var(--background-color);
+    position: sticky; /* Keep 'Time' column visible */
+    left: 0;
+    z-index: 1; /* Ensure it stays above other cells during scroll */
+    box-shadow: 2px 0 2px rgba(0,0,0,0.05); /* Optional: add a subtle shadow */
 }
 .monitoring-table input {
     width: 100%;
-    padding: 0.5rem;
+    padding: 0.3rem; /* Reduced padding for inputs */
     border: 1px solid var(--border-color);
     border-radius: 4px;
     text-align: center;
+    font-size: 0.9rem; /* Smaller font size for inputs */
 }
 .monitoring-table input:focus {
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 2px rgba(0, 90, 156, 0.2);
+}
+
+/* Specific adjustments for smaller screens */
+@media (max-width: 768px) {
+    .monitoring-table {
+        min-width: 700px; /* Keep a minimum width to enable horizontal scroll */
+    }
+    .monitoring-table th, .monitoring-table td {
+        padding: 0.5rem 0.3rem; /* Further reduce padding on mobile */
+        min-width: 60px; /* Further reduced min-width */
+    }
+    .monitoring-table input {
+        font-size: 0.85rem; /* Further reduce font size */
+        padding: 0.2rem;
+    }
 }
 
 /* --- Mobile / Responsive --- */
