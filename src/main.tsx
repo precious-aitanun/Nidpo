@@ -1251,28 +1251,30 @@ type MonitoringTableProps = {
 };
 const MonitoringTable = ({ formData, handleInputChange }: MonitoringTableProps) => {
     const days = Array.from({ length: 14 }, (_, i) => i + 1);
-    const times = ['Morning', 'Afternoon', 'Night'];
+    const times = ['morning', 'afternoon', 'night'];
+    const timeLabels = ['Morning', 'Afternoon', 'Night'];
 
     return (
         <div className="monitoring-table-wrapper">
             <table className="monitoring-table">
                 <thead>
                     <tr>
-                        <th>Time</th>
-                        {days.map(day => <th key={day}>Day {day}</th>)}
+                        <th>Day</th>
+                        {timeLabels.map(time => <th key={time}>{time}</th>)}
                     </tr>
                 </thead>
                 <tbody>
-                    {times.map(time => (
-                        <tr key={time}>
-                            <td>{time}</td>
-                            {days.map(day => (
-                                <td key={day}>
+                    {days.map(day => (
+                        <tr key={day}>
+                            <td className="day-cell">Day {day}</td>
+                            {times.map(time => (
+                                <td key={time}>
                                     <input
                                         type="text"
                                         aria-label={`Day ${day} ${time}`}
-                                        value={formData[`glucose_day${day}_${time.toLowerCase()}`] || ''}
-                                        onChange={e => handleInputChange(`glucose_day${day}_${time.toLowerCase()}`, e.target.value)}
+                                        value={formData[`glucose_day${day}_${time}`] || ''}
+                                        onChange={e => handleInputChange(`glucose_day${day}_${time}`, e.target.value)}
+                                        placeholder="mg/dL"
                                     />
                                 </td>
                             ))}
