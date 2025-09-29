@@ -434,13 +434,15 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
+
+    useEffect(() => {
     const fetchPatients = useCallback(async () => {
     setLoading(true);
     
     // Explicitly list fields instead of using *
     let query = supabase
         .from('patients')
-        .select('id, patientId, age, sex, centerId, dateAdded, centers(name)');
+        .select('*');
     
     if (currentUser.role !== 'admin') {
         query = query.eq('centerId', currentUser.centerId);
@@ -455,11 +457,9 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
         setPatients(data as Patient[]);
     }
     setLoading(false);
-}, [currentUser, showNotification]);
-
-    useEffect(() => {
+    };
         fetchPatients();
-    }, [fetchPatients]);
+    }, [currentUser, showNotification]);
 
     const filteredPatients = useMemo(() => {
         return patients.filter(p => 
@@ -624,6 +624,8 @@ function UsersPage({ showNotification }: UsersPageProps) {
     const [showLinkModal, setShowLinkModal] = useState(false);
 
 
+
+    useEffect(() => {
     const fetchData = useCallback(async () => {
         setLoading(true);
         const [usersRes, centersRes] = await Promise.all([
@@ -638,11 +640,9 @@ function UsersPage({ showNotification }: UsersPageProps) {
         else setCenters(centersRes.data as Center[]);
 
         setLoading(false);
-    }, [showNotification]);
-
-    useEffect(() => {
+    };
         fetchData();
-    }, [fetchData]);
+    }, [showNotification]);
     
     const handleInviteUser = async (newUserData: AddUserFormData) => {
         const { data, error } = await supabase
@@ -743,6 +743,8 @@ function CentersPage({ showNotification }: CentersPageProps) {
     const [centers, setCenters] = useState<Center[]>([]);
     const [loading, setLoading] = useState(true);
 
+
+    useEffect(() => {
     const fetchCenters = useCallback(async () => {
         setLoading(true);
         const { data, error } = await supabase.from('centers').select('*');
@@ -752,11 +754,9 @@ function CentersPage({ showNotification }: CentersPageProps) {
             setCenters(data as Center[]);
         }
         setLoading(false);
-    }, [showNotification]);
-
-    useEffect(() => {
+    };
         fetchCenters();
-    }, [fetchCenters]);
+    }, [showNotification]);
 
     if (loading) return <LoadingSpinner />;
 
@@ -1244,6 +1244,7 @@ function App() {
             }
 
             setCurrentUser(profile as UserProfile);
+            setLoading(false);
 
             // Fetch stats in background for admin
             if (profile.role === 'admin') {
@@ -1261,6 +1262,7 @@ function App() {
             }
         } catch (error) {
             console.error("Error in fetchInitialData:", error);
+            setLoading(false);
         }
     };
 
@@ -1276,13 +1278,16 @@ function App() {
 
             if (!session) {
                 await checkAdminExists();
+                setLoading(false);
+                return;
             }
 
             setSession(session);
-            setLoading(false); // Stop loading immediately
             
             if (session?.user) {
-                fetchInitialData(session.user); // Don't await
+                await fetchInitialData(session.user); // Don't await
+            } else {
+                setLoading(false);
             }
         } catch (error) {
             console.error("Error initializing session:", error);
