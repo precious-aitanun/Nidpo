@@ -1011,22 +1011,16 @@ function InvitationSignUpPage({ token, showNotification, onSignedUp }: Invitatio
     }, [token]);
 
     const handleSignUp = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!invitation) return;
+    e.preventDefault();
+    if (!invitation) return;
 
-        setLoading(true);
-        setError('');
+    setLoading(true);
+    setError('');
 
+    try {
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
             email: invitation.email,
             password: password,
-            options: {
-                data: {
-                    name: name,
-                    role: invitation.role,
-                    centerId: invitation.centerId
-                }
-            }
         });
         
         if (signUpError) {
@@ -1036,13 +1030,34 @@ function InvitationSignUpPage({ token, showNotification, onSignedUp }: Invitatio
         }
 
         if (signUpData.user) {
-             // Clean up the used invitation token
+            // Create profile with correct role
+            const { error: profileError } = await supabase
+                .from('profiles')
+                .insert({
+                    id: signUpData.user.id,
+                    name: name,
+                    email: invitation.email,
+                    role: invitation.role,
+                    centerId: invitation.centerId
+                });
+
+            if (profileError) {
+                setError(`Profile creation failed: ${profileError.message}`);
+                setLoading(false);
+                return;
+            }
+
             await supabase.rpc('delete_invitation', { invitation_token: token });
             showNotification('Sign up successful! Please check your email for verification.', 'success');
             onSignedUp();
         }
-    };
-    
+    } catch (err) {
+        setError('An unexpected error occurred.');
+        console.error('Sign up error:', err);
+    } finally {
+        setLoading(false);
+    }
+};
     if (loading) return <LoadingSpinner />;
 
     return (
@@ -1206,17 +1221,18 @@ function App() {
     };
 
     useEffect(() => {
-        const checkAdminExists = async () => {
-            const { data, error } = await supabase.from('profiles').select('id').eq('role', 'admin').limit(1);
-            if (error) {
-                console.error("Error checking for admin:", error);
-                setHasAdmin(true); // Fail safe
-            } else {
-                setHasAdmin(data.length > 0);
-            }
-        };
+    const checkAdminExists = async () => {
+        const { data, error } = await supabase.from('profiles').select('id').eq('role', 'admin').limit(1);
+        if (error) {
+            console.error("Error checking for admin:", error);
+            setHasAdmin(true);
+        } else {
+            setHasAdmin(data.length > 0);
+        }
+    };
 
-        const fetchInitialData = async (user: User) => {
+    const fetchInitialData = async (user: User) => {
+        try {
             const { data: profile, error: profileError } = await supabase
                 .from('profiles')
                 .select('*, centers(name)')
@@ -1231,55 +1247,70 @@ function App() {
 
             setCurrentUser(profile as UserProfile);
 
+            // Fetch stats in background for admin
             if (profile.role === 'admin') {
-                const [patientsRes, usersRes, centersRes] = await Promise.all([
+                Promise.all([
                     supabase.from('patients').select('id', { count: 'exact', head: true }),
                     supabase.from('profiles').select('id', { count: 'exact', head: true }),
                     supabase.from('centers').select('id', { count: 'exact', head: true }),
-                ]);
-                setStats({
-                    patients: patientsRes.count || 0,
-                    users: usersRes.count || 0,
-                    centers: centersRes.count || 0
-                });
+                ]).then(([patientsRes, usersRes, centersRes]) => {
+                    setStats({
+                        patients: patientsRes.count || 0,
+                        users: usersRes.count || 0,
+                        centers: centersRes.count || 0
+                    });
+                }).catch(err => console.error("Error fetching stats:", err));
             }
-        };
+        } catch (error) {
+            console.error("Error in fetchInitialData:", error);
+        }
+    };
 
-        const initializeSession = async () => {
-            await checkAdminExists();
-            
+    const initializeSession = async () => {
+        try {
             const { data: { session }, error } = await supabase.auth.getSession();
+            
             if (error) {
                 showNotification("Failed to initialize session.", "error");
                 setLoading(false);
                 return;
             }
 
+            if (!session) {
+                await checkAdminExists();
+            }
+
+            setSession(session);
+            setLoading(false); // Stop loading immediately
+            
+            if (session?.user) {
+                fetchInitialData(session.user); // Don't await
+            }
+        } catch (error) {
+            console.error("Error initializing session:", error);
+            setLoading(false);
+        }
+    };
+
+    initializeSession();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+        async (_event, session) => {
             setSession(session);
             if (session?.user) {
-                await fetchInitialData(session.user);
+                fetchInitialData(session.user);
+            } else {
+                setCurrentUser(null);
+                await checkAdminExists();
             }
-            setLoading(false);
-        };
+        }
+    );
 
-        initializeSession();
+    return () => {
+        authListener.subscription.unsubscribe();
+    };
+}, [showNotification]);
 
-        const { data: authListener } = supabase.auth.onAuthStateChange(
-            async (_event, session) => {
-                setSession(session);
-                if (session?.user) {
-                    await fetchInitialData(session.user);
-                } else {
-                    setCurrentUser(null);
-                    await checkAdminExists();
-                }
-            }
-        );
-
-        return () => {
-            authListener.subscription.unsubscribe();
-        };
-    }, [showNotification]);
 
 
     const handleLogout = async () => {
@@ -1306,6 +1337,11 @@ function App() {
             setHasAdmin(true);
         }}/>;
     }
+
+    // Show loading if we have session but profile hasn't loaded
+if (session && !currentUser) {
+    return <LoadingSpinner />;
+}
     
     const renderPage = () => {
         switch (currentPage) {
