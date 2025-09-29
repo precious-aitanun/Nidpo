@@ -336,13 +336,12 @@ const IconEdit = () => <svg fill="none" viewBox="0 0 24 24" stroke="currentColor
 
 type SidebarProps = {
     currentPage: string;
-    setCurrentPage: (page: string) => void;
     userRole: UserProfile['role'];
     isOpen: boolean;
     setIsOpen: (isOpen: boolean) => void;
     onNavigate: (page: string) => void;
 };
-function Sidebar({ currentPage, setCurrentPage, userRole, isOpen, setIsOpen, onNavigate }: SidebarProps) {
+function Sidebar({ currentPage, userRole, isOpen, setIsOpen, onNavigate }: SidebarProps) {
     const navLinks = [
         { name: 'Dashboard', icon: <IconDashboard />, page: 'dashboard', roles: ['admin', 'researcher', 'data-entry'] },
         { name: 'Patients', icon: <IconPatients />, page: 'patients', roles: ['admin', 'researcher', 'data-entry'] },
@@ -1466,7 +1465,6 @@ function App() {
             {notifications.map(n => <Notification key={n.id} {...n} onClose={() => setNotifications(p => p.filter(i => i.id !== n.id))} />)}
             <Sidebar 
                 currentPage={currentPage} 
-                setCurrentPage={setCurrentPage} 
                 userRole={currentUser.role}
                 isOpen={isSidebarOpen}
                 setIsOpen={setSidebarOpen}
