@@ -1021,6 +1021,13 @@ function InvitationSignUpPage({ token, showNotification, onSignedUp }: Invitatio
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
             email: invitation.email,
             password: password,
+            options: {
+                data: {
+                    name: name,
+                    role: invitation.role,
+                    centerId: invitation.centerId
+                }
+            }
         });
         
         if (signUpError) {
@@ -1030,23 +1037,6 @@ function InvitationSignUpPage({ token, showNotification, onSignedUp }: Invitatio
         }
 
         if (signUpData.user) {
-            // Create profile with correct role
-            const { error: profileError } = await supabase
-                .from('profiles')
-                .insert({
-                    id: signUpData.user.id,
-                    name: name,
-                    email: invitation.email,
-                    role: invitation.role,
-                    centerId: invitation.centerId
-                });
-
-            if (profileError) {
-                setError(`Profile creation failed: ${profileError.message}`);
-                setLoading(false);
-                return;
-            }
-
             await supabase.rpc('delete_invitation', { invitation_token: token });
             showNotification('Sign up successful! Please check your email for verification.', 'success');
             onSignedUp();
