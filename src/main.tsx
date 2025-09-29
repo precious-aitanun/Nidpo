@@ -24,7 +24,7 @@ type Patient = {
   sex: string;
   centerId: number;
   dateAdded: string;
-  centers: { name: string } | null;
+  centers: { name: string };
   formData?: any;
 };
 type NotificationType = {
@@ -440,7 +440,7 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
     // Explicitly list fields instead of using *
     let query = supabase
         .from('patients')
-        .select('id, patientId, age, sex, centerId, dateAdded, formData', 'centers(name)');
+        .select('id, patientId, age, sex, centerId, dateAdded, formData, centers(name)');
     
     if (currentUser.role !== 'admin') {
         query = query.eq('centerId', currentUser.centerId);
