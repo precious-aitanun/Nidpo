@@ -434,46 +434,25 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
 
-
     const fetchPatients = useCallback(async () => {
     setLoading(true);
-    try {
-        // Try without joining centers first
-        let query = supabase
-            .from('patients')
-            .select('id, patientId, age, sex, centerId, dateAdded');
-        
-        if (currentUser.role !== 'admin') {
-            query = query.eq('centerId', currentUser.centerId);
-        }
+    
+    // Explicitly list fields instead of using *
+    let query = supabase
+        .from('patients')
+        .select('id, patientId, age, sex, centerId, dateAdded, formData, centers(name)');
+    
+    if (currentUser.role !== 'admin') {
+        query = query.eq('centerId', currentUser.centerId);
+    }
 
-        const { data, error } = await query.order('dateAdded', { ascending: false });
+    const { data, error } = await query.order('dateAdded', { ascending: false });
 
-        if (error) {
-            showNotification('Error fetching patients: ' + error.message, 'error');
-            console.error('Fetch patients error:', error);
-        } else {
-            // Manually fetch center names
-            const centerIds = [...new Set(data.map(p => p.centerId))];
-            const { data: centersData } = await supabase
-                .from('centers')
-                .select('id, name')
-                .in('id', centerIds);
-            
-            const centersMap = Object.fromEntries(
-                (centersData || []).map(c => [c.id, c])
-            );
-            
-            const patientsWithCenters = data.map(p => ({
-                ...p,
-                centers: centersMap[p.centerId] || { name: 'N/A' }
-            }));
-            
-            setPatients(patientsWithCenters as Patient[]);
-        }
-    } catch (err) {
-        console.error('Unexpected error:', err);
-        showNotification('An unexpected error occurred', 'error');
+    if (error) {
+        showNotification('Error fetching patients: ' + error.message, 'error' + ' from center' + currentUser.centerId);
+        console.error('Fetch error:', error);
+    } else {
+        setPatients(data as Patient[]);
     }
     setLoading(false);
 }, [currentUser, showNotification]);
