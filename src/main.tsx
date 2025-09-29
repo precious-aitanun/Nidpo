@@ -1266,20 +1266,20 @@ const MonitoringTable = ({ formData, handleInputChange }: MonitoringTableProps) 
                 <tbody>
                     {days.map(day => (
                         <tr key={day}>
-                            <td className="day-cell">Day {day}</td>
-                            {times.map(time => (
-                                <td key={time}>
-                                    <input
-                                        type="text"
-                                        aria-label={`Day ${day} ${time}`}
-                                        value={formData[`glucose_day${day}_${time}`] || ''}
-                                        onChange={e => handleInputChange(`glucose_day${day}_${time}`, e.target.value)}
-                                        placeholder="mg/dL"
-                                    />
-                                </td>
+                            <td className="day-cell" data-label="Day">Day {day}</td>
+                            {times.map((time, idx) => (
+                              <td key={time} data-label={timeLabels[idx]}>
+                                <input
+                                  type="text"
+                                  aria-label={`Day ${day} ${time}`}
+                                  value={formData[`glucose_day${day}_${time}`] || ''}
+                                  onChange={e => handleInputChange(`glucose_day${day}_${time}`, e.target.value)}
+                                  placeholder="mg/dL"
+                                />
+                              </td>
                             ))}
                         </tr>
-                    ))}
+                   ))}
                 </tbody>
             </table>
         </div>

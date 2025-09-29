@@ -872,57 +872,68 @@ tbody tr:last-child td {
 }
 
 /* --- Monitoring Table --- */
+/* --- Monitoring Table: Mobile-First --- */
 .monitoring-table-wrapper {
+  width: 100%;
   overflow-x: auto;
+  border: none;
   margin-bottom: 1.5rem;
-  border: 2px solid var(--border-color);
-  border-radius: var(--border-radius);
-  -webkit-overflow-scrolling: touch;
-  box-shadow: var(--shadow-sm);
+  box-shadow: none;
+  background: none;
 }
 
 .monitoring-table {
   width: 100%;
-  border-collapse: collapse;
-  min-width: 500px;
+  border-collapse: separate;
+  border-spacing: 0 0.5rem;
+  min-width: unset;
+  background: none;
 }
 
-.monitoring-table th,
-.monitoring-table td {
-  padding: 0.85rem;
-  text-align: center;
+.monitoring-table thead {
+  display: none; /* Hide table headers on mobile */
+}
+
+.monitoring-table tr {
+  display: block;
+  margin-bottom: 1.5rem;
+  border-radius: 8px;
+  box-shadow: var(--shadow-sm);
+  background: var(--surface-color);
   border: 1px solid var(--border-color);
+  padding: 0.5rem 0.75rem;
 }
 
-.monitoring-table th {
-  background-color: var(--primary-color);
-  color: white;
+.monitoring-table td {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 1rem;
+}
+
+/* For accessibility and mobile labeling, add data-label to each <td> in the table markup, e.g. <td data-label="Day">Monday</td> */
+.monitoring-table td::before {
+  content: attr(data-label);
+  flex-basis: 50%;
+  color: var(--text-light-color);
   font-weight: 600;
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  text-transform: uppercase;
-  font-size: 0.85rem;
-  letter-spacing: 0.5px;
+  text-align: left;
+  padding-right: 1rem;
+  font-size: 0.95rem;
 }
 
 .monitoring-table td.day-cell {
-  font-weight: 600;
-  text-align: left;
-  background-color: var(--background-color);
-  white-space: nowrap;
-  position: sticky;
-  left: 0;
-  z-index: 5;
+  font-weight: 700;
   color: var(--primary-color);
+  background: none;
+  position: static;
 }
 
-.monitoring-table tbody tr:hover {
-  background-color: var(--primary-light);
-}
-
-.monitoring-table tbody tr:hover td.day-cell {
-  background-color: var(--primary-light);
+.monitoring-table td:last-child {
+  border-bottom: none;
 }
 
 .monitoring-table input {
@@ -933,7 +944,6 @@ tbody tr:last-child td {
   border-radius: 6px;
   text-align: center;
   font-size: 0.95rem;
-  transition: var(--transition);
 }
 
 .monitoring-table input:focus {
@@ -942,10 +952,71 @@ tbody tr:last-child td {
   box-shadow: 0 0 0 3px var(--primary-light);
 }
 
-.monitoring-table input::placeholder {
-  color: var(--text-light-color);
-  font-size: 0.85rem;
+/* --- Desktop Styles (Enhancements for larger screens) --- */
+@media (min-width: 700px) {
+  .monitoring-table-wrapper {
+    overflow-x: auto;
+    border: 2px solid var(--border-color);
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-sm);
+    background: var(--surface-color);
+  }
+
+  .monitoring-table {
+    min-width: 500px;
+    border-collapse: collapse;
+  }
+
+  .monitoring-table thead {
+    display: table-header-group;
+  }
+
+  .monitoring-table tr {
+    display: table-row;
+    background: none;
+    border: none;
+    box-shadow: none;
+    margin-bottom: 0;
+    border-radius: 0;
+    padding: 0;
+  }
+
+  .monitoring-table td,
+  .monitoring-table th {
+    display: table-cell;
+    padding: 0.85rem;
+    border: 1px solid var(--border-color);
+    font-size: 1rem;
+  }
+
+  .monitoring-table td::before {
+    content: none; /* Remove mobile label */
+  }
+
+  .monitoring-table th {
+    background-color: var(--primary-color);
+    color: white;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    text-transform: uppercase;
+    font-size: 0.85rem;
+    letter-spacing: 0.5px;
+  }
+
+  .monitoring-table td.day-cell {
+    font-weight: 600;
+    text-align: left;
+    background-color: var(--background-color);
+    white-space: nowrap;
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    color: var(--primary-color);
+  }
 }
+
 
 /* --- Responsive Design --- */
 @media (max-width: 480px) {
@@ -1336,33 +1407,6 @@ tbody tr:last-child td {
 
   .form-content-wrapper h2 {
     font-size: 1.4rem;
-  }
-
-  .monitoring-table-wrapper {
-    margin: 0 -1.5rem 1.5rem;
-    border-left: none;
-    border-right: none;
-    border-radius: 0;
-    width: 100%;
-    display: block;
-    min-width: 0;
-  }
-
-  .monitoring-table {
-    min-width: 650px;
-    width: auto;
-  }
-
-  .monitoring-table th,
-  .monitoring-table td {
-    padding: 0.6rem;
-    font-size: 0.85rem;
-  }
-
-  .monitoring-table input {
-    padding: 0.4rem;
-    font-size: 0.85rem;
-    max-width: 90px;
   }
 
   .dashboard-grid {
