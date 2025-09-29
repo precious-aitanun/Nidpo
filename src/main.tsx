@@ -440,7 +440,7 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
     // Explicitly list fields instead of using *
     let query = supabase
         .from('patients')
-        .select('id, patientId, age, sex, centerId, dateAdded');
+        .select('id, patientId, age, sex, centerId, dateAdded, formData');
     
     if (currentUser.role !== 'admin') {
         query = query.eq('centerId', currentUser.centerId);
@@ -452,7 +452,7 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
         showNotification('Error fetching patients: ' + error.message, 'error');
         console.error(`Fetch error (center ${currentUser.centerId}):`, error);
     } else {
-        setPatients(data || []);
+        setPatients(data as Patient[]);
     }
     setLoading(false);
 }, [currentUser, showNotification]);
