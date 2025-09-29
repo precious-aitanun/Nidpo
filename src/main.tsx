@@ -436,7 +436,7 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
 
 
     useEffect(() => {
-    const fetchPatients = useCallback(async () => {
+    const fetchPatients = async () => {
     setLoading(true);
     
     // Explicitly list fields instead of using *
@@ -450,13 +450,13 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
 
     const { data, error } = await query.order('dateAdded', { ascending: false });
 
-    if (error) {
+      if (error) {
         showNotification('Error fetching patients: ' + error.message, 'error');
         console.error(`Fetch error (center ${currentUser.centerId}):`, error);
-    } else {
+      } else {
         setPatients(data as Patient[]);
-    }
-    setLoading(false);
+      }
+      setLoading(false);
     };
         fetchPatients();
     }, [currentUser, showNotification]);
@@ -623,26 +623,33 @@ function UsersPage({ showNotification }: UsersPageProps) {
     const [invitationLink, setInvitationLink] = useState('');
     const [showLinkModal, setShowLinkModal] = useState(false);
 
+  useEffect(() => {
+  const fetchData = async () => {
+    setLoading(true);
 
+    const [usersRes, centersRes] = await Promise.all([
+      supabase.from('profiles').select('*, centers(name)'),
+      supabase.from('centers').select('*')
+    ]);
 
-    useEffect(() => {
-    const fetchData = useCallback(async () => {
-        setLoading(true);
-        const [usersRes, centersRes] = await Promise.all([
-            supabase.from('profiles').select('*, centers(name)'),
-            supabase.from('centers').select('*')
-        ]);
+    if (usersRes.error) {
+      showNotification('Error fetching users: ' + usersRes.error.message, 'error');
+    } else {
+      setUsers(usersRes.data as UserProfile[]);
+    }
 
-        if (usersRes.error) showNotification('Error fetching users: ' + usersRes.error.message, 'error');
-        else setUsers(usersRes.data as UserProfile[]);
+    if (centersRes.error) {
+      showNotification('Error fetching centers: ' + centersRes.error.message, 'error');
+    } else {
+      setCenters(centersRes.data as Center[]);
+    }
 
-        if (centersRes.error) showNotification('Error fetching centers: ' + centersRes.error.message, 'error');
-        else setCenters(centersRes.data as Center[]);
+    setLoading(false);
+  };
 
-        setLoading(false);
-    };
-        fetchData();
-    }, [showNotification]);
+  fetchData();
+}, [showNotification]);
+
     
     const handleInviteUser = async (newUserData: AddUserFormData) => {
         const { data, error } = await supabase
@@ -745,19 +752,19 @@ function CentersPage({ showNotification }: CentersPageProps) {
 
 
     useEffect(() => {
-    const fetchCenters = useCallback(async () => {
-        setLoading(true);
-        const { data, error } = await supabase.from('centers').select('*');
-        if (error) {
-            showNotification('Error fetching centers: ' + error.message, 'error');
-        } else {
-            setCenters(data as Center[]);
-        }
-        setLoading(false);
-    };
-        fetchCenters();
-    }, [showNotification]);
+  const fetchCenters = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from('centers').select('*');
+    if (error) {
+      showNotification('Error fetching centers: ' + error.message, 'error');
+    } else {
+      setCenters(data as Center[]);
+    }
+    setLoading(false);
+  };
 
+  fetchCenters();
+}, [showNotification]);
     if (loading) return <LoadingSpinner />;
 
     return (
