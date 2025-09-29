@@ -436,7 +436,18 @@ function PatientsPage({ currentUser, showNotification }: PatientsPageProps) {
 
     const fetchPatients = useCallback(async () => {
         setLoading(true);
-        let query = supabase.from('patients').select('*, centers(name)');
+        let query = supabase
+        .from('patients')
+        .select(`
+            id,
+            patientId,
+            age,
+            sex,
+            centerId,
+            dateAdded,
+            centers!inner(name)
+        `);
+    
         
         if (currentUser.role !== 'admin') {
             query = query.eq('centerId', currentUser.centerId);
