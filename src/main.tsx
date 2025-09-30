@@ -1692,54 +1692,80 @@ function App() {
             }
         };
 
-        const initializeSession = async () => {
-            try {
+
+    const initializeSession = async () => {
+        try {
+            // Check if this is a password recovery redirect
+            const hash = window.location.hash;
+            if (hash.includes('type=recovery')) {
+                // Give Supabase time to process the recovery token
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                
                 const { data: { session }, error } = await supabase.auth.getSession();
                 
                 if (error) {
                     showNotification("Failed to initialize session.", "error");
+                    window.location.hash = '/';
                     setLoading(false);
                     return;
                 }
 
-                if (!session) {
-                    await checkAdminExists();
-                    setLoading(false);
-                    return;
+                if (session) {
+                    setSession(session);
+                    window.location.hash = '#/reset-password';
                 }
+            }
 
-                setSession(session);
-                
-                if (session?.user) {
-                    await fetchInitialData(session.user);
-                } else {
-                    setLoading(false);
-                }
-            } catch (error) {
-                console.error("Error initializing session:", error);
+            const { data: { session }, error } = await supabase.auth.getSession();
+            
+            if (error) {
+                showNotification("Failed to initialize session.", "error");
+                setLoading(false);
+                return;
+            }
+
+            if (!session) {
+                await checkAdminExists();
+                setLoading(false);
+                return;
+            }
+
+            setSession(session);
+            
+            if (session?.user) {
+                await fetchInitialData(session.user);
+            } else {
                 setLoading(false);
             }
-        };
+        } catch (error) {
+            console.error("Error initializing session:", error);
+            setLoading(false);
+        }
+    };
 
-        initializeSession();
+    initializeSession();
 
-        const { data: authListener } = supabase.auth.onAuthStateChange(
-            async (_event, session) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+        async (event, session) => {
+            if (event === 'PASSWORD_RECOVERY') {
                 setSession(session);
-                if (session?.user) {
-                    fetchInitialData(session.user);
-                } else {
-                    setCurrentUser(null);
-                    await checkAdminExists();
-                }
+                window.location.hash = '#/reset-password';
             }
-        );
+            
+            setSession(session);
+            if (session?.user) {
+                fetchInitialData(session.user);
+            } else {
+                setCurrentUser(null);
+                await checkAdminExists();
+            }
+        }
+    );
 
-        return () => {
-            authListener.subscription.unsubscribe();
-        };
-    }, [showNotification]);
-
+    return () => {
+        authListener.subscription.unsubscribe();
+    };
+}, [showNotification]);
     const handleLogout = async () => {
         await supabase.auth.signOut();
         setCurrentPage('dashboard');
@@ -1775,7 +1801,7 @@ function App() {
         return <LoadingSpinner />;
     }
 
-    if (isResetPassword) {
+    if (isResetPassword && !loading) {
         return (
             <>
                 {notifications.map(n => <Notification key={n.id} {...n} onClose={() => setNotifications(p => p.filter(i => i.id !== n.id))} />)}
