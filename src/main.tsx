@@ -1426,34 +1426,40 @@ function AuthPage({ hasAdmin, onAdminCreated }: AuthPageProps) {
         setLoading(false);
     };
 
+
     const handleAdminSignUp = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        setError('');
+    e.preventDefault();
+    setLoading(true);
+    setError('');
 
-        const { data, error: signUpError } = await supabase.auth.signUp({
-            email,
-            password,
-            options: { data: { name } }
-        });
-
-        if (signUpError) {
-            setError(signUpError.message);
-            setLoading(false);
-            return;
+    const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { 
+            data: { 
+                name,
+                role: 'researcher'  // Add this temporary role
+            } 
         }
+    });
 
-        if (data.user) {
-            const { error: rpcError } = await supabase.rpc('promote_user_to_admin', { user_id: data.user.id });
-
-            if (rpcError) {
-                setError(`Failed to set admin role: ${rpcError.message}`);
-            } else {
-                onAdminCreated();
-            }
-        }
+    if (signUpError) {
+        setError(signUpError.message);
         setLoading(false);
-    };
+        return;
+    }
+
+    if (data.user) {
+        const { error: rpcError } = await supabase.rpc('promote_user_to_admin', { user_id: data.user.id });
+
+        if (rpcError) {
+            setError(`Failed to set admin role: ${rpcError.message}`);
+        } else {
+            onAdminCreated();
+        }
+    }
+    setLoading(false);
+};
 
     const renderForm = () => {
         if (mode === 'admin_signup') {
