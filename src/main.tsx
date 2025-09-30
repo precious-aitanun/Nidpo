@@ -1405,16 +1405,64 @@ function InvitationSignUpPage({ token, showNotification, onSignedUp }: Invitatio
     );
 }
 
+function ResetPasswordPage({ showNotification }: { showNotification: (msg: string, type: 'success' | 'error') => void }) {
+    const [newPassword, setNewPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const handleUpdatePassword = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+
+        const { error } = await supabase.auth.updateUser({
+            password: newPassword
+        });
+
+        if (error) {
+            showNotification('Error updating password: ' + error.message, 'error');
+        } else {
+            showNotification('Password updated successfully!', 'success');
+            window.location.hash = '/';
+        }
+        setLoading(false);
+    };
+
+    return (
+        <div className="auth-container">
+            <div className="auth-form">
+                <form onSubmit={handleUpdatePassword}>
+                    <h1>Set New Password</h1>
+                    <div className="form-group">
+                        <label htmlFor="password">New Password</label>
+                        <input 
+                            id="password" 
+                            type="password" 
+                            value={newPassword} 
+                            onChange={e => setNewPassword(e.target.value)} 
+                            required 
+                            minLength={6}
+                        />
+                    </div>
+                    <button type="submit" className="btn" disabled={loading}>
+                        {loading ? 'Updating...' : 'Update Password'}
+                    </button>
+                </form>
+            </div>
+        </div>
+    );
+}
+
 type AuthPageProps = {
     hasAdmin: boolean;
     onAdminCreated: () => void;
 };
 function AuthPage({ hasAdmin, onAdminCreated }: AuthPageProps) {
     const mode = hasAdmin ? 'login' : 'admin_signup';
+    const [authMode, setAuthMode] = useState<'login' | 'admin_signup' | 'reset'>(mode);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [name, setName] = useState('');
     const [error, setError] = useState('');
+    const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
 
     const handleLogin = async (e: React.FormEvent) => {
@@ -1460,6 +1508,48 @@ function AuthPage({ hasAdmin, onAdminCreated }: AuthPageProps) {
     }
     setLoading(false);
 };
+    const handlePasswordReset = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setLoading(true);
+        setError('');
+        setMessage('');
+
+        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+            redirectTo: `${window.location.origin}${window.location.pathname}#/reset-password`,
+        });
+
+        if (error) {
+            setError(error.message);
+        } else {
+            setMessage('Password reset link sent! Check your email.');
+        }
+        setLoading(false);
+    };
+
+      if (authMode === 'reset') {
+        return (
+            <div className="auth-container">
+                <div className="auth-form">
+                    <form onSubmit={handlePasswordReset}>
+                        <h1>Reset Password</h1>
+                        <p>Enter your email to receive a password reset link.</p>
+                        <div className="form-group">
+                            <label htmlFor="email">Email Address</label>
+                            <input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+                        </div>
+                        <button type="submit" className="btn" disabled={loading}>
+                            {loading ? 'Sending...' : 'Send Reset Link'}
+                        </button>
+                        <button type="button" className="btn btn-secondary" onClick={() => setAuthMode('login')} style={{marginTop: '0.5rem'}}>
+                            Back to Login
+                        </button>
+                    </form>
+                    {error && <p className="error-message">{error}</p>}
+                    {message && <p style={{color: 'green', marginTop: '1rem'}}>{message}</p>}
+                </div>
+            </div>
+        );
+      }
 
     const renderForm = () => {
         if (mode === 'admin_signup') {
@@ -1505,6 +1595,17 @@ function AuthPage({ hasAdmin, onAdminCreated }: AuthPageProps) {
         <div className="auth-container">
             <div className="auth-form">
                 {renderForm()}
+                {authMode === 'login' && (
+                    <>
+                        {/* ... email and password fields ... */}
+                        <button type="button" onClick={() => setAuthMode('reset')} style={{background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', marginBottom: '1rem'}}>
+                            Forgot Password?
+                        </button>
+                        <button type="submit" className="btn" disabled={loading}>
+                            {loading ? 'Logging In...' : 'Log In'}
+                        </button>
+                    </>
+                )}
                 {error && <p className="error-message">{error}</p>}
             </div>
         </div>
@@ -1529,6 +1630,7 @@ function App() {
     const urlHash = window.location.hash;
     const params = new URLSearchParams(urlHash.substring(urlHash.indexOf('?')));
     const invitationToken = params.get('token');
+    const isResetPassword = urlHash.includes('/reset-password');
 
     const showNotification = useCallback((message: string, type: 'success' | 'error') => {
         const newNotif = { id: Date.now(), message, type };
@@ -1674,6 +1776,15 @@ function App() {
     
     if (loading) {
         return <LoadingSpinner />;
+    }
+
+    if (isResetPassword && session) {
+        return (
+            <>
+                {notifications.map(n => <Notification key={n.id} {...n} onClose={() => setNotifications(p => p.filter(i => i.id !== n.id))} />)}
+                <ResetPasswordPage showNotification={showNotification} />
+            </>
+        );
     }
 
     if (invitationToken) {
