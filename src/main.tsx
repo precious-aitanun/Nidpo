@@ -1627,7 +1627,7 @@ function App() {
     const urlHash = window.location.hash;
     const params = new URLSearchParams(urlHash.substring(urlHash.indexOf('?')));
     const invitationToken = params.get('token');
-    const isResetPassword = urlHash.includes('/reset-password');
+    const isResetPassword = urlHash.includes('/reset-password') || urlHash.includes('type=recovery');
 
     const showNotification = useCallback((message: string, type: 'success' | 'error') => {
         const newNotif = { id: Date.now(), message, type };
@@ -1775,7 +1775,7 @@ function App() {
         return <LoadingSpinner />;
     }
 
-    if (isResetPassword && session) {
+    if (isResetPassword) {
         return (
             <>
                 {notifications.map(n => <Notification key={n.id} {...n} onClose={() => setNotifications(p => p.filter(i => i.id !== n.id))} />)}
