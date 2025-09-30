@@ -1508,24 +1508,24 @@ function AuthPage({ hasAdmin, onAdminCreated }: AuthPageProps) {
     }
     setLoading(false);
 };
-    const handlePasswordReset = async (e: React.FormEvent) => {
-        e.preventDefault();
-        setLoading(true);
-        setError('');
-        setMessage('');
+  const handlePasswordReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    setMessage('');
 
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
-            redirectTo: `${window.location.origin}${window.location.pathname}#/reset-password`,
-        });
+    const baseUrl = window.location.origin + window.location.pathname.replace(/\/$/, '');
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${baseUrl}#/reset-password`,
+    });
 
-        if (error) {
-            setError(error.message);
-        } else {
-            setMessage('Password reset link sent! Check your email.');
-        }
-        setLoading(false);
-    };
-
+    if (error) {
+        setError(error.message);
+    } else {
+        setMessage('Password reset link sent! Check your email.');
+    }
+    setLoading(false);
+};
       if (authMode === 'reset') {
         return (
             <div className="auth-container">
@@ -1600,9 +1600,6 @@ function AuthPage({ hasAdmin, onAdminCreated }: AuthPageProps) {
                         {/* ... email and password fields ... */}
                         <button type="button" onClick={() => setAuthMode('reset')} style={{background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', marginBottom: '1rem'}}>
                             Forgot Password?
-                        </button>
-                        <button type="submit" className="btn" disabled={loading}>
-                            {loading ? 'Logging In...' : 'Log In'}
                         </button>
                     </>
                 )}
