@@ -86,7 +86,7 @@ const formStructure: FormSection[] = [
             { id: 'currentMedications', label: 'Current medications', type: 'checkbox', options: ['Oral hypoglycemics', 'Insulin', 'Others'], required: true },
             { id: 'medicationOther', label: 'If Others medication, specify', type: 'text', condition: (data) => data.currentMedications?.includes('Others') },
             { id: 'oralHypoglycemicAgents', label: 'Oral hypoglycemic agents', type: 'checkbox', options: ['Sulfonylureas', 'TZD', 'Metformin', 'SGLUT2', 'Other', 'None'], required: true },
-            { id: 'oralHypoglycemicAgentsOther', label: 'If Other, specify type', type: 'text', condition: (data) => data.oralHypoglycemicAgents?.includes('Other') },
+            { id: 'oralHypoglycemicAgentsOther', label: 'If Other oral hypoglycemic agents, specify', type: 'text', condition: (data) => data.oralHypoglycemicAgents?.includes('Other') },
             { id: 'medicationAdherence', label: 'Adherence to medication', type: 'radio', options: ['Yes', 'No'], required: true },
             { id: 'previousAdmissions', label: 'Previous hospital admissions for diabetes-related complications', type: 'radio', options: ['Yes', 'No'], required: true },
             { id: 'previousAdmissionsCount', label: 'If Yes, how many times?', type: 'number', condition: (data) => data.previousAdmissions === 'Yes' },
