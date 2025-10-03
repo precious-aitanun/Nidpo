@@ -1282,31 +1282,49 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
 
     // Validate all required fields
     const validateForm = (): { isValid: boolean; missingFields: string[] } => {
-        const missingFields: string[] = [];
-        
-        formStructure.forEach(section => {
-            section.fields.forEach(field => {
-                // Skip if conditional field and condition not met
-                if (field.condition && !field.condition(formData)) {
-                    return;
+    const missingFields: string[] = [];
+    
+    formStructure.forEach(section => {
+        section.fields.forEach(field => {
+            // Skip if conditional field and condition not met
+            if (field.condition && !field.condition(formData)) {
+                return;
+            }
+            
+            // Special handling for monitoring table
+            if (field.type === 'monitoring_table' && field.required) {
+                // Check if at least some glucose readings are filled
+                let hasAnyReading = false;
+                for (let day = 1; day <= 14; day++) {
+                    ['morning', 'afternoon', 'night'].forEach(time => {
+                        const fieldId = `glucose_day${day}_${time}`;
+                        if (formData[fieldId] && formData[fieldId].trim() !== '') {
+                            hasAnyReading = true;
+                        }
+                    });
                 }
-                
-                // Check required fields
-                if (field.required) {
-                    const value = formData[field.id];
-                    if (value === undefined || value === null || value === '' || 
-                        (Array.isArray(value) && value.length === 0)) {
-                        missingFields.push(`${section.title}: ${field.label}`);
-                    }
+                if (!hasAnyReading) {
+                    missingFields.push(`${section.title}: ${field.label}`);
                 }
-            });
+                return;
+            }
+            
+            // Check required fields
+            if (field.required) {
+                const value = formData[field.id];
+                if (value === undefined || value === null || value === '' || 
+                    (Array.isArray(value) && value.length === 0)) {
+                    missingFields.push(`${section.title}: ${field.label}`);
+                }
+            }
         });
-        
-        return {
-            isValid: missingFields.length === 0,
-            missingFields
-        };
+    });
+    
+    return {
+        isValid: missingFields.length === 0,
+        missingFields
     };
+};
 
     // Save as draft
     const handleSaveDraft = async () => {
