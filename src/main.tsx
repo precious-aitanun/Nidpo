@@ -1055,6 +1055,10 @@ function CenterForm({ center, onSave, onCancel, showNotification }: CenterFormPr
     );
 }
 
+type CentersPageProps = {
+    showNotification: (message: string, type: 'success' | 'error') => void;
+};
+
 function CentersPage({ showNotification }: CentersPageProps) {
     const [centers, setCenters] = useState<Center[]>([]);
     const [loading, setLoading] = useState(true);
