@@ -1660,26 +1660,57 @@ function InvitationSignUpPage({ token, showNotification, onSignedUp }: Invitatio
     );
 }
 
+// Replace your current ResetPasswordPage component
 function ResetPasswordPage({ showNotification }: { showNotification: (msg: string, type: 'success' | 'error') => void }) {
     const [newPassword, setNewPassword] = useState('');
     const [loading, setLoading] = useState(false);
+    const [isReady, setIsReady] = useState(false);
+
+    useEffect(() => {
+        // Verify we have a valid session before allowing password update
+        const checkSession = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                setIsReady(true);
+            } else {
+                showNotification('Invalid or expired reset link. Please request a new one.', 'error');
+                setTimeout(() => {
+                    window.location.hash = '/';
+                }, 2000);
+            }
+        };
+        checkSession();
+    }, []);
 
     const handleUpdatePassword = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        if (newPassword.length < 6) {
+            showNotification('Password must be at least 6 characters', 'error');
+            return;
+        }
+        
         setLoading(true);
 
         const { error } = await supabase.auth.updateUser({
             password: newPassword
         });
 
+        setLoading(false);
+
         if (error) {
             showNotification('Error updating password: ' + error.message, 'error');
         } else {
             showNotification('Password updated successfully!', 'success');
-            window.location.hash = '/';
+            setTimeout(() => {
+                window.location.hash = '/';
+            }, 1500);
         }
-        setLoading(false);
     };
+
+    if (!isReady) {
+        return <LoadingSpinner />;
+    }
 
     return (
         <div className="auth-container">
@@ -1687,7 +1718,7 @@ function ResetPasswordPage({ showNotification }: { showNotification: (msg: strin
                 <form onSubmit={handleUpdatePassword}>
                     <h1>Set New Password</h1>
                     <div className="form-group">
-                        <label htmlFor="password">New Password</label>
+                        <label htmlFor="password">New Password (minimum 6 characters)</label>
                         <input 
                             id="password" 
                             type="password" 
@@ -1947,76 +1978,74 @@ function App() {
             }
         };
 
-
-    const initializeSession = async () => {
-        try {
-            // Check if this is a password recovery redirect
-            const hash = window.location.hash;
-            if (hash.includes('type=recovery')) {
-                // Give Supabase time to process the recovery token
-                await new Promise(resolve => setTimeout(resolve, 1000));
-                
-                const { data: { session }, error } = await supabase.auth.getSession();
-                
-                if (error) {
-                    showNotification("Failed to initialize session.", "error");
-                    window.location.hash = '/';
-                    setLoading(false);
-                    return;
-                }
-
-                if (session) {
-                    setSession(session);
-                    window.location.hash = '#/reset-password';
-                }
-            }
-
-            const { data: { session }, error } = await supabase.auth.getSession();
-            
-            if (error) {
-                showNotification("Failed to initialize session.", "error");
-                setLoading(false);
-                return;
-            }
-
-            if (!session) {
-                await checkAdminExists();
-                setLoading(false);
-                return;
-            }
-
-            setSession(session);
-            
-            if (session?.user) {
-                await fetchInitialData(session.user);
-            } else {
-                setLoading(false);
-            }
-        } catch (error) {
-            console.error("Error initializing session:", error);
-            setLoading(false);
-        }
-    };
+      // In your App component, replace the initializeSession function:
+      const initializeSession = async () => {
+          try {
+              const hash = window.location.hash;
+              
+              // Let Supabase handle the recovery token automatically
+              // Don't try to manually process it
+              const { data: { session }, error } = await supabase.auth.getSession();
+              
+              if (error) {
+                  console.error("Session error:", error);
+                  showNotification("Failed to initialize session.", "error");
+                  setLoading(false);
+                  return;
+              }
+      
+              // If we have a session and it's a recovery, redirect to reset page
+              if (session && hash.includes('type=recovery')) {
+                  setSession(session);
+                  window.location.hash = '#/reset-password';
+                  setLoading(false);
+                  return;
+              }
+      
+              if (!session) {
+                  await checkAdminExists();
+                  setLoading(false);
+                  return;
+              }
+      
+              setSession(session);
+              
+              if (session?.user) {
+                  await fetchInitialData(session.user);
+              } else {
+                  setLoading(false);
+              }
+          } catch (error) {
+              console.error("Error initializing session:", error);
+              setLoading(false);
+          }
+      };
 
     initializeSession();
 
+
+    // In useEffect, update your onAuthStateChange handler:
     const { data: authListener } = supabase.auth.onAuthStateChange(
         async (event, session) => {
+            console.log('Auth event:', event); // For debugging
+            
             if (event === 'PASSWORD_RECOVERY') {
                 setSession(session);
                 window.location.hash = '#/reset-password';
+                setLoading(false);
+                return;
             }
             
             setSession(session);
             if (session?.user) {
-                fetchInitialData(session.user);
+                await fetchInitialData(session.user);
             } else {
                 setCurrentUser(null);
                 await checkAdminExists();
+                setLoading(false);
             }
         }
     );
-
     return () => {
         authListener.subscription.unsubscribe();
     };
