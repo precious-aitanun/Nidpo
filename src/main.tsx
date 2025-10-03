@@ -2023,29 +2023,26 @@ function App() {
 
     initializeSession();
 
-
-    // In useEffect, update your onAuthStateChange handler:
     const { data: authListener } = supabase.auth.onAuthStateChange(
-        async (event, session) => {
-            console.log('Auth event:', event); // For debugging
-            
-            if (event === 'PASSWORD_RECOVERY') {
-                setSession(session);
-                window.location.hash = '#/reset-password';
-                setLoading(false);
-                return;
-            }
-            
+    async (event, session) => {
+        console.log('Auth event:', event); // For debugging
+        
+        if (event === 'PASSWORD_RECOVERY') {
             setSession(session);
-            if (session?.user) {
-                await fetchInitialData(session.user);
-            } else {
-                setCurrentUser(null);
-                await checkAdminExists();
-                setLoading(false);
-            }
+            window.location.hash = '#/reset-password';
+            return;
         }
-    );
+        
+        setSession(session);
+        if (session?.user) {
+            await fetchInitialData(session.user); // This handles setLoading(false) internally
+        } else {
+            setCurrentUser(null);
+            await checkAdminExists();
+            setLoading(false);
+        }
+    }
+);
     return () => {
         authListener.subscription.unsubscribe();
     };
