@@ -2039,9 +2039,13 @@ function App() {
             setLoading(false);
             return;
         }
+
+        // Handle sign in events
+        if (event === 'SIGNED_IN' && session?.user) {
+            setSession(session);
+            await fetchInitialData(session.user);
+        }
         
-        // For SIGNED_IN events, let the initializeSession handle it
-        // to avoid duplicate fetchInitialData calls
     }
 );
     return () => {
