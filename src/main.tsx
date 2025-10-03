@@ -84,7 +84,8 @@ const formStructure: FormSection[] = [
             { id: 'previousDiagnosis', label: 'Previous diagnosis of diabetes', type: 'radio', options: ['Yes', 'No'], required: true },
             { id: 'durationOfDiabetes', label: 'If Yes, duration of diabetes (years)', type: 'number', condition: (data) => data.previousDiagnosis === 'Yes' },
             { id: 'currentMedications', label: 'Current medications', type: 'checkbox', options: ['Oral hypoglycemics', 'Insulin', 'Others'], required: true },
-            { id: 'oralHypoglycemicAgents', label: 'Oral hypoglycemic agents', type: 'checkbox', options: ['Sulfonylureas', 'TZD', 'SGLUTI', 'None'], required: true },
+            { id: 'oralHypoglycemicAgents', label: 'Oral hypoglycemic agents', type: 'checkbox', options: ['Sulfonylureas', 'TZD', 'Metformin', 'SGLUT2', 'Other', 'None'], required: true },
+            { id: 'oralHypoglycemicAgentsOther', label: 'If Other, specify type', type: 'text', condition: (data) => data.oralHypoglycemicAgents === 'Other' },
             { id: 'medicationOther', label: 'If Others medication, specify', type: 'text', condition: (data) => data.currentMedications?.includes('Others') },
             { id: 'medicationAdherence', label: 'Adherence to medication', type: 'radio', options: ['Yes', 'No'], required: true },
             { id: 'previousAdmissions', label: 'Previous hospital admissions for diabetes-related complications', type: 'radio', options: ['Yes', 'No'], required: true },
@@ -495,6 +496,12 @@ type HeaderProps = {
     onMenuClick: () => void;
 };
 function Header({ currentUser, onLogout, onMenuClick }: HeaderProps) {
+    const handleLogoutClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        onLogout();
+    };
+
     return (
         <header className="header">
             <button className="mobile-menu-btn" onClick={onMenuClick}>
@@ -502,7 +509,12 @@ function Header({ currentUser, onLogout, onMenuClick }: HeaderProps) {
             </button>
             <div className="user-info">
                 <span>Welcome, {currentUser.name}</span>
-                <button onClick={onLogout} className="logout-btn" aria-label="Logout">
+                <button 
+                    onClick={handleLogoutClick} 
+                    className="logout-btn" 
+                    aria-label="Logout"
+                    type="button"
+                >
                     <IconLogout />
                 </button>
             </div>
