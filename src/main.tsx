@@ -1978,69 +1978,70 @@ function App() {
             }
         };
 
-      // In your App component, replace the initializeSession function:
-      const initializeSession = async () => {
-          try {
-              const hash = window.location.hash;
-              
-              // Let Supabase handle the recovery token automatically
-              // Don't try to manually process it
-              const { data: { session }, error } = await supabase.auth.getSession();
-              
-              if (error) {
-                  console.error("Session error:", error);
-                  showNotification("Failed to initialize session.", "error");
-                  setLoading(false);
-                  return;
-              }
-      
-              // If we have a session and it's a recovery, redirect to reset page
-              if (session && hash.includes('type=recovery')) {
-                  setSession(session);
-                  window.location.hash = '#/reset-password';
-                  setLoading(false);
-                  return;
-              }
-      
-              if (!session) {
-                  await checkAdminExists();
-                  setLoading(false);
-                  return;
-              }
-      
-              setSession(session);
-              
-              if (session?.user) {
-                  await fetchInitialData(session.user);
-              } else {
-                  setLoading(false);
-              }
-          } catch (error) {
-              console.error("Error initializing session:", error);
-              setLoading(false);
-          }
-      };
 
+    const initializeSession = async () => {
+    try {
+        const hash = window.location.hash;
+        
+        const { data: { session }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+            console.error("Session error:", error);
+            showNotification("Failed to initialize session.", "error");
+            setLoading(false);
+            return;
+        }
+
+        // If we have a session and it's a recovery, redirect to reset page
+        if (session && hash.includes('type=recovery')) {
+            setSession(session);
+            window.location.hash = '#/reset-password';
+            setLoading(false);
+            return;
+        }
+
+        if (!session) {
+            await checkAdminExists();
+            setLoading(false);
+            return;
+        }
+
+        setSession(session);
+        
+        if (session?.user) {
+            console.log('Fetching initial data for user:', session.user.id);
+            await fetchInitialData(session.user);
+        } else {
+            console.log('Session exists but no user');
+            setLoading(false);
+        }
+    } catch (error) {
+        console.error("Error initializing session:", error);
+        setLoading(false);
+    }
+};
     initializeSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
     async (event, session) => {
-        console.log('Auth event:', event); // For debugging
+        console.log('Auth event:', event);
         
+        // Only handle specific events that require special treatment
         if (event === 'PASSWORD_RECOVERY') {
             setSession(session);
             window.location.hash = '#/reset-password';
             return;
         }
         
-        setSession(session);
-        if (session?.user) {
-            await fetchInitialData(session.user); // This handles setLoading(false) internally
-        } else {
+        if (event === 'SIGNED_OUT') {
+            setSession(null);
             setCurrentUser(null);
-            await checkAdminExists();
             setLoading(false);
+            return;
         }
+        
+        // For SIGNED_IN events, let the initializeSession handle it
+        // to avoid duplicate fetchInitialData calls
     }
 );
     return () => {
