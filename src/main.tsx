@@ -766,6 +766,58 @@ function AddUserForm({ centers, onAddUser, onCancel, showNotification }: AddUser
     );
 }
 
+type EditUserFormProps = {
+    user: UserProfile;
+    centers: Center[];
+    onSave: (data: { role: UserProfile['role']; centerId: number }) => Promise<void>;
+    onCancel: () => void;
+    showNotification: (message: string, type: 'success' | 'error') => void;
+};
+function EditUserForm({ user, centers, onSave, onCancel, showNotification }: EditUserFormProps) {
+    const [role, setRole] = useState<UserProfile['role']>(user.role);
+    const [centerId, setCenterId] = useState<number>(user.centerId || 0);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!centerId && role !== 'admin') {
+            showNotification('Please select a center', 'error');
+            return;
+        }
+        setIsSubmitting(true);
+        await onSave({ role, centerId });
+        setIsSubmitting(false);
+    };
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <div className="form-group">
+                <label htmlFor="role">Role</label>
+                <select id="role" value={role} onChange={e => setRole(e.target.value as UserProfile['role'])} required>
+                    <option value="admin">Admin</option>
+                    <option value="researcher">Researcher</option>
+                    <option value="data-entry">Data Entry</option>
+                </select>
+            </div>
+            {role !== 'admin' && (
+                <div className="form-group">
+                    <label htmlFor="center">Research Center</label>
+                    <select id="center" value={centerId} onChange={e => setCenterId(Number(e.target.value))} required>
+                        <option value={0} disabled>Select a center</option>
+                        {centers.map(center => <option key={center.id} value={center.id}>{center.name}</option>)}
+                    </select>
+                </div>
+            )}
+            <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={onCancel}>Cancel</button>
+                <button type="submit" className="btn" disabled={isSubmitting}>
+                    {isSubmitting ? 'Saving...' : 'Save Changes'}
+                </button>
+            </div>
+        </form>
+    );
+}
+
 type UsersPageProps = {
     showNotification: (message: string, type: 'success' | 'error') => void;
 };
@@ -774,35 +826,37 @@ function UsersPage({ showNotification }: UsersPageProps) {
     const [centers, setCenters] = useState<Center[]>([]);
     const [loading, setLoading] = useState(true);
     const [showAddUserModal, setShowAddUserModal] = useState(false);
+    const [showEditUserModal, setShowEditUserModal] = useState(false);
+    const [editingUser, setEditingUser] = useState<UserProfile | null>(null);
     const [invitationLink, setInvitationLink] = useState('');
     const [showLinkModal, setShowLinkModal] = useState(false);
 
+    const fetchData = async () => {
+        setLoading(true);
+
+        const [usersRes, centersRes] = await Promise.all([
+            supabase.from('profiles').select('*, centers(name)'),
+            supabase.from('centers').select('*')
+        ]);
+
+        if (usersRes.error) {
+            showNotification('Error fetching users: ' + usersRes.error.message, 'error');
+        } else {
+            setUsers(usersRes.data as UserProfile[]);
+        }
+
+        if (centersRes.error) {
+            showNotification('Error fetching centers: ' + centersRes.error.message, 'error');
+        } else {
+            setCenters(centersRes.data as Center[]);
+        }
+
+        setLoading(false);
+    };
+
     useEffect(() => {
-        const fetchData = async () => {
-            setLoading(true);
-
-            const [usersRes, centersRes] = await Promise.all([
-                supabase.from('profiles').select('*, centers(name)'),
-                supabase.from('centers').select('*')
-            ]);
-
-            if (usersRes.error) {
-                showNotification('Error fetching users: ' + usersRes.error.message, 'error');
-            } else {
-                setUsers(usersRes.data as UserProfile[]);
-            }
-
-            if (centersRes.error) {
-                showNotification('Error fetching centers: ' + centersRes.error.message, 'error');
-            } else {
-                setCenters(centersRes.data as Center[]);
-            }
-
-            setLoading(false);
-        };
-
         fetchData();
-    }, [showNotification]);
+    }, []);
 
     const handleInviteUser = async (newUserData: AddUserFormData) => {
         const { data, error } = await supabase
@@ -830,6 +884,41 @@ function UsersPage({ showNotification }: UsersPageProps) {
         showNotification('Invitation link generated successfully.', 'success');
     };
 
+    const handleEditUser = async (updatedData: { role: UserProfile['role']; centerId: number }) => {
+        if (!editingUser) return;
+
+        const { error } = await supabase
+            .from('profiles')
+            .update({
+                role: updatedData.role,
+                centerId: updatedData.centerId
+            })
+            .eq('id', editingUser.id);
+
+        if (error) {
+            showNotification(`Error updating user: ${error.message}`, 'error');
+        } else {
+            showNotification('User updated successfully', 'success');
+            setShowEditUserModal(false);
+            setEditingUser(null);
+            fetchData();
+        }
+    };
+
+    const handleDeleteUser = async (userId: string) => {
+        if (!confirm('Are you sure you want to delete this user? This will also delete their auth account.')) return;
+
+        // Delete from auth.users (which will cascade to profiles)
+        const { error } = await supabase.rpc('delete_user', { user_id: userId });
+
+        if (error) {
+            showNotification(`Error deleting user: ${error.message}`, 'error');
+        } else {
+            showNotification('User deleted successfully', 'success');
+            fetchData();
+        }
+    };
+
     if (loading) return <LoadingSpinner />;
 
     return (
@@ -844,7 +933,18 @@ function UsersPage({ showNotification }: UsersPageProps) {
                     />
                 </Modal>
             )}
-             {showLinkModal && (
+            {showEditUserModal && editingUser && (
+                <Modal title="Edit User" onClose={() => { setShowEditUserModal(false); setEditingUser(null); }}>
+                    <EditUserForm
+                        user={editingUser}
+                        centers={centers}
+                        onSave={handleEditUser}
+                        onCancel={() => { setShowEditUserModal(false); setEditingUser(null); }}
+                        showNotification={showNotification}
+                    />
+                </Modal>
+            )}
+            {showLinkModal && (
                 <Modal title="Invitation Link" onClose={() => setShowLinkModal(false)}>
                     <p>Share this link with the new user to complete their registration:</p>
                     <input type="text" readOnly value={invitationLink} style={{width: '100%', padding: '0.5rem', marginTop: '1rem'}} />
@@ -860,10 +960,10 @@ function UsersPage({ showNotification }: UsersPageProps) {
                 <h1>User Management</h1>
             </div>
             <div className="table-container">
-                 <div className="table-controls">
+                <div className="table-controls">
                     <p className="table-description">Manage user roles and center assignments.</p>
                     <div className="table-actions">
-                         <button className="btn" onClick={() => setShowAddUserModal(true)}>
+                        <button className="btn" onClick={() => setShowAddUserModal(true)}>
                             <IconPlus /> Add User
                         </button>
                     </div>
@@ -876,6 +976,7 @@ function UsersPage({ showNotification }: UsersPageProps) {
                                 <th>Email</th>
                                 <th>Role</th>
                                 <th>Center</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -885,6 +986,23 @@ function UsersPage({ showNotification }: UsersPageProps) {
                                     <td>{user.email}</td>
                                     <td>{user.role}</td>
                                     <td>{user.centers?.name || 'N/A'}</td>
+                                    <td className="actions-cell">
+                                        <button 
+                                            onClick={() => { setEditingUser(user); setShowEditUserModal(true); }}
+                                            className="btn-icon"
+                                            title="Edit User"
+                                        >
+                                            <IconEdit />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDeleteUser(user.id)}
+                                            className="btn-icon"
+                                            title="Delete User"
+                                            style={{ color: '#dc3545' }}
+                                        >
+                                            <IconTrash />
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
@@ -895,42 +1013,158 @@ function UsersPage({ showNotification }: UsersPageProps) {
     );
 }
 
-type CentersPageProps = {
+type CenterFormProps = {
+    center?: Center;
+    onSave: (name: string, location: string) => Promise<void>;
+    onCancel: () => void;
     showNotification: (message: string, type: 'success' | 'error') => void;
 };
+function CenterForm({ center, onSave, onCancel, showNotification }: CenterFormProps) {
+    const [name, setName] = useState(center?.name || '');
+    const [location, setLocation] = useState(center?.location || '');
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!name || !location) {
+            showNotification('All fields are required', 'error');
+            return;
+        }
+        setIsSubmitting(true);
+        await onSave(name, location);
+        setIsSubmitting(false);
+    };
+
+    return (
+        <form onSubmit={handleSubmit}>
+            <div className="form-group">
+                <label htmlFor="name">Center Name</label>
+                <input id="name" type="text" value={name} onChange={e => setName(e.target.value)} required />
+            </div>
+            <div className="form-group">
+                <label htmlFor="location">Location</label>
+                <input id="location" type="text" value={location} onChange={e => setLocation(e.target.value)} required />
+            </div>
+            <div className="modal-actions">
+                <button type="button" className="btn btn-secondary" onClick={onCancel}>Cancel</button>
+                <button type="submit" className="btn" disabled={isSubmitting}>
+                    {isSubmitting ? 'Saving...' : center ? 'Update Center' : 'Add Center'}
+                </button>
+            </div>
+        </form>
+    );
+}
+
 function CentersPage({ showNotification }: CentersPageProps) {
     const [centers, setCenters] = useState<Center[]>([]);
     const [loading, setLoading] = useState(true);
+    const [showAddModal, setShowAddModal] = useState(false);
+    const [showEditModal, setShowEditModal] = useState(false);
+    const [editingCenter, setEditingCenter] = useState<Center | null>(null);
+
+    const fetchCenters = async () => {
+        setLoading(true);
+        const { data, error } = await supabase.from('centers').select('*');
+        if (error) {
+            showNotification('Error fetching centers: ' + error.message, 'error');
+        } else {
+            setCenters(data as Center[]);
+        }
+        setLoading(false);
+    };
 
     useEffect(() => {
-        const fetchCenters = async () => {
-            setLoading(true);
-            const { data, error } = await supabase.from('centers').select('*');
-            if (error) {
-                showNotification('Error fetching centers: ' + error.message, 'error');
-            } else {
-                setCenters(data as Center[]);
-            }
-            setLoading(false);
-        };
-
         fetchCenters();
-    }, [showNotification]);
+    }, []);
+
+    const handleAddCenter = async (name: string, location: string) => {
+        const { error } = await supabase
+            .from('centers')
+            .insert({ name, location });
+
+        if (error) {
+            showNotification(`Error adding center: ${error.message}`, 'error');
+        } else {
+            showNotification('Center added successfully', 'success');
+            setShowAddModal(false);
+            fetchCenters();
+        }
+    };
+
+    const handleEditCenter = async (id: number, name: string, location: string) => {
+        const { error } = await supabase
+            .from('centers')
+            .update({ name, location })
+            .eq('id', id);
+
+        if (error) {
+            showNotification(`Error updating center: ${error.message}`, 'error');
+        } else {
+            showNotification('Center updated successfully', 'success');
+            setShowEditModal(false);
+            setEditingCenter(null);
+            fetchCenters();
+        }
+    };
+
+    const handleDeleteCenter = async (id: number) => {
+        if (!confirm('Are you sure you want to delete this center?')) return;
+
+        const { error } = await supabase
+            .from('centers')
+            .delete()
+            .eq('id', id);
+
+        if (error) {
+            showNotification(`Error deleting center: ${error.message}`, 'error');
+        } else {
+            showNotification('Center deleted successfully', 'success');
+            fetchCenters();
+        }
+    };
     
     if (loading) return <LoadingSpinner />;
 
     return (
         <div>
+            {showAddModal && (
+                <Modal title="Add Research Center" onClose={() => setShowAddModal(false)}>
+                    <CenterForm
+                        onSave={handleAddCenter}
+                        onCancel={() => setShowAddModal(false)}
+                        showNotification={showNotification}
+                    />
+                </Modal>
+            )}
+            {showEditModal && editingCenter && (
+                <Modal title="Edit Research Center" onClose={() => { setShowEditModal(false); setEditingCenter(null); }}>
+                    <CenterForm
+                        center={editingCenter}
+                        onSave={(name, location) => handleEditCenter(editingCenter.id, name, location)}
+                        onCancel={() => { setShowEditModal(false); setEditingCenter(null); }}
+                        showNotification={showNotification}
+                    />
+                </Modal>
+            )}
             <div className="page-header">
                 <h1>Research Centers</h1>
             </div>
             <div className="table-container">
+                <div className="table-controls">
+                    <p className="table-description">Manage research centers.</p>
+                    <div className="table-actions">
+                        <button className="btn" onClick={() => setShowAddModal(true)}>
+                            <IconPlus /> Add Center
+                        </button>
+                    </div>
+                </div>
                 <div className="table-wrapper">
                     <table>
                         <thead>
                             <tr>
                                 <th>Name</th>
                                 <th>Location</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -938,6 +1172,23 @@ function CentersPage({ showNotification }: CentersPageProps) {
                                 <tr key={center.id}>
                                     <td>{center.name}</td>
                                     <td>{center.location}</td>
+                                    <td className="actions-cell">
+                                        <button 
+                                            onClick={() => { setEditingCenter(center); setShowEditModal(true); }}
+                                            className="btn-icon"
+                                            title="Edit Center"
+                                        >
+                                            <IconEdit />
+                                        </button>
+                                        <button 
+                                            onClick={() => handleDeleteCenter(center.id)}
+                                            className="btn-icon"
+                                            title="Delete Center"
+                                            style={{ color: '#dc3545' }}
+                                        >
+                                            <IconTrash />
+                                        </button>
+                                    </td>
                                 </tr>
                             ))}
                         </tbody>
