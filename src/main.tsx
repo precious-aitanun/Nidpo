@@ -2040,12 +2040,11 @@ function App() {
             return;
         }
 
-        // Handle sign in events
-        if (event === 'SIGNED_IN' && session?.user) {
+       // Handle sign in events (but not initial session which is handled by initializeSession)
+        if (event === 'SIGNED_IN' && session?.user && !currentUser) {
             setSession(session);
             await fetchInitialData(session.user);
-        }
-        
+        } 
     }
 );
     return () => {
