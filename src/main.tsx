@@ -1913,6 +1913,7 @@ function App() {
     const urlHash = window.location.hash;
     const params = new URLSearchParams(urlHash.substring(urlHash.indexOf('?')));
     const invitationToken = params.get('token');
+    const isInitializing = React.useRef(false);
     const isResetPassword = urlHash.includes('/reset-password') || urlHash.includes('type=recovery');
 
     const showNotification = useCallback((message: string, type: 'success' | 'error') => {
@@ -1978,9 +1979,11 @@ function App() {
             }
         };
 
-
     const initializeSession = async () => {
     try {
+        if (isInitializing.current) return; // Prevent duplicate initialization
+        isInitializing.current = true;
+        
         const hash = window.location.hash;
         
         const { data: { session }, error } = await supabase.auth.getSession();
@@ -1989,6 +1992,7 @@ function App() {
             console.error("Session error:", error);
             showNotification("Failed to initialize session.", "error");
             setLoading(false);
+            isInitializing.current = false;
             return;
         }
 
@@ -1997,12 +2001,14 @@ function App() {
             setSession(session);
             window.location.hash = '#/reset-password';
             setLoading(false);
+            isInitializing.current = false;
             return;
         }
 
         if (!session) {
             await checkAdminExists();
             setLoading(false);
+            isInitializing.current = false;
             return;
         }
 
@@ -2015,18 +2021,21 @@ function App() {
             console.log('Session exists but no user');
             setLoading(false);
         }
+        
+        isInitializing.current = false;
     } catch (error) {
         console.error("Error initializing session:", error);
         setLoading(false);
+        isInitializing.current = false;
     }
 };
+
     initializeSession();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
     async (event, session) => {
-        console.log('Auth event:', event);
+        console.log('Auth event:', event, 'isInitializing:', isInitializing.current);
         
-        // Only handle specific events that require special treatment
         if (event === 'PASSWORD_RECOVERY') {
             setSession(session);
             window.location.hash = '#/reset-password';
@@ -2037,16 +2046,20 @@ function App() {
             setSession(null);
             setCurrentUser(null);
             setLoading(false);
+            isInitializing.current = false;
             return;
         }
-
-       // Handle sign in events (but not initial session which is handled by initializeSession)
-        if (event === 'SIGNED_IN' && session?.user && !currentUser) {
+        
+        // Only handle SIGNED_IN if we're not already initializing (to avoid duplicate calls)
+        if (event === 'SIGNED_IN' && session?.user && !isInitializing.current) {
+            isInitializing.current = true;
             setSession(session);
             await fetchInitialData(session.user);
-        } 
+            isInitializing.current = false;
+        }
     }
 );
+
     return () => {
         authListener.subscription.unsubscribe();
     };
