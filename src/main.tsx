@@ -1229,7 +1229,10 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [draftId, setDraftId] = useState<number | null>(editingDraft?.id || null);
+    const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
 
+    // FIX #2: Remove auto-loading of drafts on mount
+    // Users want a fresh form when clicking "Add Patient"
     useEffect(() => {
         if (editingPatient) {
             setFormData(editingPatient.formData || {});
@@ -1238,28 +1241,56 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
             setFormData(editingDraft.form_data || {});
             setDraftId(editingDraft.id);
         }
+        // Removed the auto-load draft logic that was here before
     }, [editingPatient, editingDraft]);
 
-      // Load draft if exists for new patient
+    // NEW: Auto-save to localStorage every 30 seconds
     useEffect(() => {
-        const loadDraft = async () => {
-            if (editingPatient || editingDraft) return; // Don't auto-load if already editing something 
-            const { data, error } = await supabase
-                .from('drafts')
-                .select('*')
-                .eq('user_id', currentUser.id)
-                .order('updated_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
-            if (data && !error) {
-                setFormData(data.form_data || {});
-                setDraftId(data.id);
-                showNotification('Draft loaded automatically', 'success');
+        const autoSaveInterval = setInterval(() => {
+            if (Object.keys(formData).length > 0 && formData.serialNumber) {
+                const backupData = {
+                    formData,
+                    timestamp: new Date().toISOString(),
+                    userId: currentUser.id
+                };
+                localStorage.setItem('nidipo_form_backup', JSON.stringify(backupData));
+                console.log('Auto-saved to localStorage');
             }
-        };
-        loadDraft();
-    }, [currentUser.id, editingPatient, showNotification]);
+        }, 30000); // Every 30 seconds
+
+        return () => clearInterval(autoSaveInterval);
+    }, [formData, currentUser.id]);
+
+    // NEW: Load from localStorage on mount if available (as a safety net)
+    useEffect(() => {
+        if (!editingPatient && !editingDraft) {
+            const backup = localStorage.getItem('nidipo_form_backup');
+            if (backup) {
+                try {
+                    const parsed = JSON.parse(backup);
+                    if (parsed.userId === currentUser.id) {
+                        // Only suggest loading if it's recent (within 24 hours)
+                        const backupTime = new Date(parsed.timestamp);
+                        const hoursSince = (Date.now() - backupTime.getTime()) / (1000 * 60 * 60);
+                        
+                        if (hoursSince < 24 && Object.keys(parsed.formData).length > 2) {
+                            const shouldRestore = window.confirm(
+                                `Found a recent form backup from ${backupTime.toLocaleString()}. Would you like to restore it?`
+                            );
+                            if (shouldRestore) {
+                                setFormData(parsed.formData);
+                                showNotification('Form restored from backup', 'success');
+                            } else {
+                                localStorage.removeItem('nidipo_form_backup');
+                            }
+                        }
+                    }
+                } catch (e) {
+                    console.error('Error loading backup:', e);
+                }
+            }
+        }
+    }, [editingPatient, editingDraft, currentUser.id]);
 
     const handleInputChange = (fieldId: string, value: any) => {
         setFormData((prev: any) => ({
@@ -1279,54 +1310,49 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
     const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, formStructure.length - 1));
     const prevStep = () => setCurrentStep(prev => Math.max(prev - 1, 0));
 
-
     // Validate all required fields
     const validateForm = (): { isValid: boolean; missingFields: string[] } => {
-    const missingFields: string[] = [];
-    
-    formStructure.forEach(section => {
-        section.fields.forEach(field => {
-            // Skip if conditional field and condition not met
-            if (field.condition && !field.condition(formData)) {
-                return;
-            }
-            
-            // Special handling for monitoring table
-            if (field.type === 'monitoring_table' && field.required) {
-                // Check if at least some glucose readings are filled
-                let hasAnyReading = false;
-                for (let day = 1; day <= 14; day++) {
-                    ['morning', 'afternoon', 'night'].forEach(time => {
-                        const fieldId = `glucose_day${day}_${time}`;
-                        if (formData[fieldId] && formData[fieldId].trim() !== '') {
-                            hasAnyReading = true;
-                        }
-                    });
+        const missingFields: string[] = [];
+        
+        formStructure.forEach(section => {
+            section.fields.forEach(field => {
+                if (field.condition && !field.condition(formData)) {
+                    return;
                 }
-                if (!hasAnyReading) {
-                    missingFields.push(`${section.title}: ${field.label}`);
+                
+                if (field.type === 'monitoring_table' && field.required) {
+                    let hasAnyReading = false;
+                    for (let day = 1; day <= 14; day++) {
+                        ['morning', 'afternoon', 'night'].forEach(time => {
+                            const fieldId = `glucose_day${day}_${time}`;
+                            if (formData[fieldId] && formData[fieldId].trim() !== '') {
+                                hasAnyReading = true;
+                            }
+                        });
+                    }
+                    if (!hasAnyReading) {
+                        missingFields.push(`${section.title}: ${field.label}`);
+                    }
+                    return;
                 }
-                return;
-            }
-            
-            // Check required fields
-            if (field.required) {
-                const value = formData[field.id];
-                if (value === undefined || value === null || value === '' || 
-                    (Array.isArray(value) && value.length === 0)) {
-                    missingFields.push(`${section.title}: ${field.label}`);
+                
+                if (field.required) {
+                    const value = formData[field.id];
+                    if (value === undefined || value === null || value === '' || 
+                        (Array.isArray(value) && value.length === 0)) {
+                        missingFields.push(`${section.title}: ${field.label}`);
+                    }
                 }
-            }
+            });
         });
-    });
-    
-    return {
-        isValid: missingFields.length === 0,
-        missingFields
+        
+        return {
+            isValid: missingFields.length === 0,
+            missingFields
+        };
     };
-};
 
-    // Save as draft
+    // FIX #1: Enhanced save draft with session check and refresh
     const handleSaveDraft = async () => {
         if (!formData.serialNumber) {
             showNotification('Please enter a Serial Number/Institutional Code before saving draft', 'error');
@@ -1335,40 +1361,94 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
 
         setIsSaving(true);
         
-        const draftData = {
-            user_id: currentUser.id,
-            center_id: currentUser.role === 'admin' && formData.centerId 
-                ? parseInt(formData.centerId) 
-                : currentUser.centerId,
-            patient_id: formData.serialNumber,
-            form_data: formData,
-            updated_at: new Date().toISOString()
-        };
+        try {
+            // Check if session is still valid
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            
+            if (sessionError || !session) {
+                showNotification('Your session has expired. Please refresh the page and log in again.', 'error');
+                setIsSaving(false);
+                return;
+            }
 
-        const { data, error } = await supabase
-            .from('drafts')
-            .upsert(draftData, { 
-                onConflict: 'user_id,patient_id,center_id',
-                ignoreDuplicates: false 
-            })
-            .select()
-            .single();
+            // If session is close to expiring (less than 5 minutes), refresh it
+            const expiresAt = session.expires_at ? session.expires_at * 1000 : 0;
+            const timeUntilExpiry = expiresAt - Date.now();
+            
+            if (timeUntilExpiry < 5 * 60 * 1000 && timeUntilExpiry > 0) {
+                const { error: refreshError } = await supabase.auth.refreshSession();
+                if (refreshError) {
+                    showNotification('Session refresh failed. Please save your work and log in again.', 'error');
+                    // Save to localStorage as backup
+                    localStorage.setItem('nidipo_form_backup', JSON.stringify({
+                        formData,
+                        timestamp: new Date().toISOString(),
+                        userId: currentUser.id
+                    }));
+                    setIsSaving(false);
+                    return;
+                }
+            }
 
-        setIsSaving(false);
+            const draftData = {
+                user_id: currentUser.id,
+                center_id: currentUser.role === 'admin' && formData.centerId 
+                    ? parseInt(formData.centerId) 
+                    : currentUser.centerId,
+                patient_id: formData.serialNumber,
+                form_data: formData,
+                updated_at: new Date().toISOString()
+            };
 
-        if (error) {
-            showNotification(`Error saving draft: ${error.message}`, 'error');
-        } else {
+            const { data, error } = await supabase
+                .from('drafts')
+                .upsert(draftData, { 
+                    onConflict: 'user_id,patient_id,center_id',
+                    ignoreDuplicates: false 
+                })
+                .select()
+                .single();
+
+            if (error) {
+                throw error;
+            }
+
             setDraftId(data.id);
+            setLastSaveTime(new Date());
+            
+            // Also save to localStorage as backup
+            localStorage.setItem('nidipo_form_backup', JSON.stringify({
+                formData,
+                timestamp: new Date().toISOString(),
+                userId: currentUser.id
+            }));
+            
             showNotification('Draft saved successfully!', 'success');
+            
+        } catch (error: any) {
+            console.error('Save draft error:', error);
+            
+            // Save to localStorage as fallback
+            localStorage.setItem('nidipo_form_backup', JSON.stringify({
+                formData,
+                timestamp: new Date().toISOString(),
+                userId: currentUser.id
+            }));
+            
+            if (error.message?.includes('JWT') || error.message?.includes('auth')) {
+                showNotification('Session expired. Your work has been saved locally. Please refresh and log in again.', 'error');
+            } else {
+                showNotification(`Error saving draft: ${error.message}. Your work has been saved locally.`, 'error');
+            }
+        } finally {
+            setIsSaving(false);
         }
     };
 
-    // Submit final form
+    // Submit final form with session check
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         
-        // Validate all required fields
         const validation = validateForm();
         if (!validation.isValid) {
             showNotification(
@@ -1380,46 +1460,49 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
 
         setIsSubmitting(true);
         
-        const coreData = {
-            patientId: formData.serialNumber,
-            age: formData.age,
-            sex: formData.sex,
-            centerId: currentUser.role === 'admin' && formData.centerId 
-            ? parseInt(formData.centerId) 
-            : currentUser.centerId,
-        };
+        try {
+            // Check session before submitting
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            
+            if (sessionError || !session) {
+                showNotification('Your session has expired. Your work is saved locally. Please refresh and log in again.', 'error');
+                setIsSubmitting(false);
+                return;
+            }
 
-        if (editingPatient) {
-            const { error } = await supabase
-                .from('patients')
-                .update({
+            const coreData = {
+                patientId: formData.serialNumber,
+                age: formData.age,
+                sex: formData.sex,
+                centerId: currentUser.role === 'admin' && formData.centerId 
+                    ? parseInt(formData.centerId) 
+                    : currentUser.centerId,
+            };
+
+            if (editingPatient) {
+                const { error } = await supabase
+                    .from('patients')
+                    .update({
+                        ...coreData,
+                        formData: formData,
+                    })
+                    .eq('id', editingPatient.id);
+
+                if (error) throw error;
+                
+                showNotification('Patient data updated successfully!', 'success');
+            } else {
+                const { error } = await supabase.from('patients').insert({
                     ...coreData,
                     formData: formData,
-                })
-                .eq('id', editingPatient.id);
+                });
 
-            setIsSubmitting(false);
-            if (error) {
-                showNotification(`Error updating patient data: ${error.message}`, 'error');
-            } else {
-                showNotification('Patient data updated successfully!', 'success');
-                onPatientAdded();
-            }
-        } else {
-            const { error } = await supabase.from('patients').insert({
-                ...coreData,
-                formData: formData,
-            });
+                if (error) throw error;
 
-            if (error) {
-                setIsSubmitting(false);
-                showNotification(`Error saving patient data: ${error.message}`, 'error');
-            } else {
                 // Delete draft after successful submission
                 if (draftId) {
                     await supabase.from('drafts').delete().eq('id', draftId);
                 } else {
-                    // Try to delete by patient_id if draftId not available
                     await supabase
                         .from('drafts')
                         .delete()
@@ -1427,10 +1510,19 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                         .eq('patient_id', formData.serialNumber);
                 }
                 
-                setIsSubmitting(false);
+                // Clear localStorage backup
+                localStorage.removeItem('nidipo_form_backup');
+                
                 showNotification('Patient data submitted successfully!', 'success');
-                onPatientAdded();
             }
+            
+            onPatientAdded();
+            
+        } catch (error: any) {
+            console.error('Submit error:', error);
+            showNotification(`Error saving patient data: ${error.message}`, 'error');
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -1491,6 +1583,11 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
         <div className="form-page-container">
             <div className="page-header">
                 <h1>{editingPatient ? 'Edit Patient Data' : 'Add New Patient Data'}</h1>
+                {lastSaveTime && (
+                    <p style={{ fontSize: '0.875rem', color: '#666' }}>
+                        Last saved: {lastSaveTime.toLocaleTimeString()}
+                    </p>
+                )}
             </div>
             <div className="form-content-wrapper">
                  <ProgressBar currentStep={currentStep} steps={formStructure.map(s => s.title)} />
@@ -1506,7 +1603,17 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                         <button type="button" className="btn btn-secondary" onClick={prevStep} disabled={currentStep === 0}>Previous</button>
                         <div className="form-navigation-steps">
                             {currentStep < formStructure.length - 1 ? (
-                                <button type="button" className="btn" onClick={nextStep}>Next</button>
+                                <>
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-secondary" 
+                                        onClick={handleSaveDraft}
+                                        disabled={isSaving || !formData.serialNumber}
+                                    >
+                                        {isSaving ? 'Saving...' : 'Save Draft'}
+                                    </button>
+                                    <button type="button" className="btn" onClick={nextStep}>Next</button>
+                                </>
                             ) : (
                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                                     <button 
