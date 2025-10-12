@@ -363,7 +363,7 @@ function Sidebar({ currentPage, userRole, isOpen, setIsOpen, onNavigate }: Sideb
     return (
         <nav className={`sidebar ${isOpen ? 'open' : ''}`}>
             <div className="sidebar-header">
-                <span className="logo">NIDIPO</span>
+                <span className="logo">NIDPO</span>
             </div>
             {navLinks.filter(link => link.roles.includes(userRole)).map(link => (
                 <a
