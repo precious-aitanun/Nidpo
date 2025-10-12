@@ -1331,17 +1331,41 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                 }
                 
                 if (field.type === 'monitoring_table' && field.required) {
-                    let hasAnyReading = false;
+                    let totalReadings = 0;
+                    const emptyDays: number[] = [];
+                    
+                    // Check each day
                     for (let day = 1; day <= 14; day++) {
+                        let dayReadings = 0;
                         ['morning', 'afternoon', 'night'].forEach(time => {
                             const fieldId = `glucose_day${day}_${time}`;
-                            if (formData[fieldId] && formData[fieldId].trim() !== '') {
-                                hasAnyReading = true;
+                            const value = formData[fieldId];
+                            if (value && value.trim() !== '') {
+                                dayReadings++;
+                                totalReadings++;
                             }
                         });
+                        
+                        // If day has partial readings, mark it
+                        if (dayReadings > 0 && dayReadings < 3) {
+                            emptyDays.push(day);
+                        }
                     }
-                    if (!hasAnyReading) {
-                        missingFields.push(`${section.title}: ${field.label}`);
+                    
+                    // Validation logic
+                    if (totalReadings === 0) {
+                        // No readings at all
+                        missingFields.push(`${section.title}: ${field.label} - All 14 days with 3 daily readings (morning, afternoon, night) are required`);
+                    } else if (totalReadings < 42) {
+                        // Incomplete readings
+                        if (emptyDays.length > 0) {
+                            const daysText = emptyDays.length <= 5 
+                                ? `Days ${emptyDays.join(', ')}`
+                                : `${emptyDays.length} days`;
+                            missingFields.push(`${section.title}: ${field.label} - Missing readings: ${daysText} have incomplete data. All 42 readings required (14 days × 3 times daily)`);
+                        } else {
+                            missingFields.push(`${section.title}: ${field.label} - ${totalReadings}/42 readings complete. All readings required.`);
+                        }
                     }
                     return;
                 }
@@ -1360,7 +1384,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
             isValid: missingFields.length === 0,
             missingFields
         };
-    };
+      };
     
     const handleSaveDraft = async () => {
     if (!formData.serialNumber) {
