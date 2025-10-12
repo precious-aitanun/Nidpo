@@ -1226,9 +1226,10 @@ type AddPatientPageProps = {
     currentUser: UserProfile;
     editingPatient?: Patient | null;
     editingDraft?: any | null;
+    isReconnecting: boolean;
 };
 
-function AddPatientPage({ showNotification, onPatientAdded, currentUser, editingPatient = null, editingDraft = null }: AddPatientPageProps) {
+function AddPatientPage({ showNotification, onPatientAdded, currentUser, editingPatient = null, editingDraft = null, isReconnecting }: AddPatientPageProps) {
     const [currentStep, setCurrentStep] = useState(0);
     const [formData, setFormData] = useState<any>(editingPatient?.formData || editingDraft?.form_data || {});
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -1554,6 +1555,8 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
         );
     };
 
+    const isActionDisabled = isSaving || isSubmitting || isReconnecting;
+
     return (
         <div className="form-page-container">
             <div className="page-header">
@@ -1567,7 +1570,11 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                 </div>
             </div>
             <div className="form-content-wrapper">
-                 <ProgressBar currentStep={currentStep} steps={formStructure.map(s => s.title)} />
+                 <ProgressBar
+                    currentStep={currentStep}
+                    steps={formStructure.map(s => s.title)}
+                    onStepClick={setCurrentStep}
+                 />
                 <form onSubmit={handleSubmit}>
                     <h2>{formStructure[currentStep].title}</h2>
                     {formStructure[currentStep].description && (
@@ -1577,7 +1584,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                         {formStructure[currentStep].fields.map((field) => renderField(field))}
                     </div>
                     <div className="form-navigation">
-                        <button type="button" className="btn btn-secondary" onClick={prevStep} disabled={currentStep === 0}>Previous</button>
+                        <button type="button" className="btn btn-secondary" onClick={prevStep} disabled={currentStep === 0 || isActionDisabled}>Previous</button>
                         <div className="form-navigation-steps">
                             {currentStep < formStructure.length - 1 ? (
                                 <>
@@ -1585,11 +1592,11 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                                         type="button" 
                                         className="btn btn-secondary" 
                                         onClick={handleSaveDraft}
-                                        disabled={isSaving || !formData.serialNumber}
+                                        disabled={isActionDisabled || !formData.serialNumber}
                                     >
                                         {isSaving ? 'Saving...' : 'Save Draft'}
                                     </button>
-                                    <button type="button" className="btn" onClick={nextStep}>Next</button>
+                                    <button type="button" className="btn" onClick={nextStep} disabled={isActionDisabled}>Next</button>
                                 </>
                             ) : (
                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -1597,11 +1604,11 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                                         type="button" 
                                         className="btn btn-secondary" 
                                         onClick={handleSaveDraft}
-                                        disabled={isSaving || !formData.serialNumber}
+                                        disabled={isActionDisabled || !formData.serialNumber}
                                     >
                                         {isSaving ? 'Saving...' : 'Save Draft'}
                                     </button>
-                                    <button type="submit" className="btn" disabled={isSubmitting}>
+                                    <button type="submit" className="btn" disabled={isActionDisabled}>
                                         {isSubmitting ? 'Submitting...' : editingPatient ? 'Update Form' : 'Submit Form'}
                                     </button>
                                 </div>
@@ -1658,14 +1665,22 @@ const MonitoringTable = ({ formData, handleInputChange }: MonitoringTableProps) 
 type ProgressBarProps = {
     currentStep: number;
     steps: string[];
+    onStepClick: (stepIndex: number) => void;
 };
-const ProgressBar = ({ currentStep, steps }: ProgressBarProps) => (
+const ProgressBar = ({ currentStep, steps, onStepClick }: ProgressBarProps) => (
     <div className="progress-bar">
         {steps.map((step, index) => (
-            <div key={index} className={`progress-step ${index === currentStep ? 'active' : ''} ${index < currentStep ? 'completed' : ''}`}>
+            <button
+                type="button"
+                key={index}
+                className={`progress-step ${index === currentStep ? 'active' : ''} ${index < currentStep ? 'completed' : ''}`}
+                onClick={() => onStepClick(index)}
+                aria-label={`Go to step ${index + 1}: ${step}`}
+                aria-current={index === currentStep ? 'step' : undefined}
+            >
                 <div className="step-number">{index < currentStep ? '✓' : index + 1}</div>
                 <div className="step-label">{step}</div>
-            </div>
+            </button>
         ))}
     </div>
 );
@@ -2004,6 +2019,11 @@ function AuthPage({ hasAdmin, onAdminCreated }: AuthPageProps) {
     );
 }
 
+const ReconnectingBanner = () => (
+    <div className="reconnecting-banner">
+        <LoadingSpinner /> Reconnecting...
+    </div>
+);
 
 // --- MAIN APP COMPONENT ---
 
@@ -2018,6 +2038,7 @@ function App() {
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
     const [editingDraft, setEditingDraft] = useState<any | null>(null);
+    const [isReconnecting, setIsReconnecting] = useState(false);
 
     const urlHash = window.location.hash;
     const params = new URLSearchParams(urlHash.substring(urlHash.indexOf('?')));
@@ -2144,6 +2165,8 @@ function App() {
     const { data: authListener } = supabase.auth.onAuthStateChange(
     async (event, session) => {
         console.log('Auth event:', event, 'isInitializing:', isInitializing.current);
+
+        setIsReconnecting(false); // Hide banner on any auth event
         
         if (event === 'PASSWORD_RECOVERY') {
             setSession(session);
@@ -2177,7 +2200,11 @@ function App() {
     // Proactively refresh session on browser tab focus to prevent stale tokens
     useEffect(() => {
         const refreshSession = () => {
-            supabase.auth.getSession();
+            // Only trigger if there's an active session
+            if (session) {
+                setIsReconnecting(true);
+                supabase.auth.getSession(); // This will trigger the onAuthStateChange listener
+            }
         };
 
         const handleVisibilityChange = () => {
@@ -2193,7 +2220,7 @@ function App() {
             window.removeEventListener('focus', refreshSession);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
         };
-    }, []);
+    }, [session]);
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
@@ -2276,6 +2303,7 @@ function App() {
                     currentUser={currentUser}
                     editingPatient={editingPatient}
                     editingDraft={editingDraft}
+                    isReconnecting={isReconnecting}
                 />;
             case 'drafts':
                 if (!['admin', 'data-entry', 'researcher'].includes(currentUser.role)) {
@@ -2300,6 +2328,7 @@ function App() {
     
     return (
         <div className="app-layout">
+            {isReconnecting && <ReconnectingBanner />}
             {notifications.map(n => <Notification key={n.id} {...n} onClose={() => setNotifications(p => p.filter(i => i.id !== n.id))} />)}
             <Sidebar 
                 currentPage={currentPage} 
