@@ -752,7 +752,7 @@ function AddUserForm({ centers, onAddUser, onCancel, showNotification }: AddUser
             </div>
             <div className="form-group">
                 <label htmlFor="email">Email Address</label>
-                <input id="email" type="email" value={email} onChange(e => setEmail(e.target.value)} required />
+                <input id="email" type="email" value={email} onChange {e => setEmail(e.target.value)} required />
             </div>
             <div className="form-group">
                 <label htmlFor="role">Role</label>
@@ -1720,7 +1720,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                         <button type="button" className="btn btn-secondary" onClick={prevStep} disabled={currentStep === 0}>Previous</button>
                         <div className="form-navigation-steps">
                             {currentStep < formStructure.length - 1 ? (
-                                <>
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
                                     <button 
                                         type="button" 
                                         className="btn btn-secondary" 
