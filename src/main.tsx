@@ -752,7 +752,7 @@ function AddUserForm({ centers, onAddUser, onCancel, showNotification }: AddUser
             </div>
             <div className="form-group">
                 <label htmlFor="email">Email Address</label>
-                <input id="email" type="email" value={email} onChange={e => setEmail(e.target.value)} required />
+                <input id="email" type="email" value={email} onChange(e => setEmail(e.target.value)} required />
             </div>
             <div className="form-group">
                 <label htmlFor="role">Role</label>
@@ -1230,6 +1230,45 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
     const [isSaving, setIsSaving] = useState(false);
     const [draftId, setDraftId] = useState<number | null>(editingDraft?.id || null);
     const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
+    const [sessionWarning, setSessionWarning] = useState(false);
+
+    // Session monitoring - check every minute
+    useEffect(() => {
+        const checkSession = async () => {
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.expires_at) {
+                    const expiresAt = session.expires_at * 1000;
+                    const timeUntilExpiry = expiresAt - Date.now();
+                    const minutesUntilExpiry = timeUntilExpiry / (1000 * 60);
+                    
+                    // Show warning if less than 10 minutes remaining
+                    if (minutesUntilExpiry < 10 && minutesUntilExpiry > 0) {
+                        setSessionWarning(true);
+                        
+                        // Auto-refresh if less than 5 minutes
+                        if (minutesUntilExpiry < 5) {
+                            console.log('Auto-refreshing session...');
+                            await supabase.auth.refreshSession();
+                            setSessionWarning(false);
+                        }
+                    } else {
+                        setSessionWarning(false);
+                    }
+                }
+            } catch (error) {
+                console.error('Session check error:', error);
+            }
+        };
+
+        // Check immediately
+        checkSession();
+
+        // Then check every minute
+        const interval = setInterval(checkSession, 60000);
+
+        return () => clearInterval(interval);
+    }, []);
 
     // FIX #2: Remove auto-loading of drafts on mount
     // Users want a fresh form when clicking "Add Patient"
@@ -1244,7 +1283,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
         // Removed the auto-load draft logic that was here before
     }, [editingPatient, editingDraft]);
 
-    // NEW: Auto-save to localStorage every 30 seconds
+    // Auto-save to localStorage every 2 minutes
     useEffect(() => {
         const autoSaveInterval = setInterval(() => {
             if (Object.keys(formData).length > 0 && formData.serialNumber) {
@@ -1254,9 +1293,9 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                     userId: currentUser.id
                 };
                 localStorage.setItem('nidipo_form_backup', JSON.stringify(backupData));
-                console.log('Auto-saved to localStorage');
+                console.log('Auto-saved to localStorage at', new Date().toLocaleTimeString());
             }
-        }, 30000); // Every 30 seconds
+        }, 120000); // Every 2 minutes
 
         return () => clearInterval(autoSaveInterval);
     }, [formData, currentUser.id]);
@@ -1352,7 +1391,42 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
         };
     };
 
-    // FIX #1: Enhanced save draft with session check and refresh
+    // Helper function to ensure valid session before operations
+    const ensureValidSession = async (): Promise<boolean> => {
+        try {
+            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+            
+            if (sessionError || !session) {
+                showNotification('Your session has expired. Please refresh the page and log in again.', 'error');
+                return false;
+            }
+
+            // Check if session is expired or about to expire (within 5 minutes)
+            const expiresAt = session.expires_at ? session.expires_at * 1000 : 0;
+            const timeUntilExpiry = expiresAt - Date.now();
+            
+            // If expired or expiring soon, try to refresh
+            if (timeUntilExpiry < 5 * 60 * 1000) {
+                console.log('Session expiring soon, attempting refresh...');
+                const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+                
+                if (refreshError || !refreshData.session) {
+                    showNotification('Session expired. Please refresh the page and log in again.', 'error');
+                    return false;
+                }
+                
+                console.log('Session refreshed successfully');
+                return true;
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('Session check error:', error);
+            showNotification('Session error. Please refresh the page.', 'error');
+            return false;
+        }
+    };
+
     const handleSaveDraft = async () => {
         if (!formData.serialNumber) {
             showNotification('Please enter a Serial Number/Institutional Code before saving draft', 'error');
@@ -1361,33 +1435,35 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
 
         setIsSaving(true);
         
+        // Set a timeout to detect stuck operations
+        const timeoutId = setTimeout(() => {
+            if (isSaving) {
+                console.warn('Draft save operation taking too long...');
+                showNotification('Network slow - attempting to save...', 'error');
+                
+                // Save to localStorage as backup
+                localStorage.setItem('nidipo_form_backup', JSON.stringify({
+                    formData,
+                    timestamp: new Date().toISOString(),
+                    userId: currentUser.id
+                }));
+            }
+        }, 15000); // 15 second timeout
+        
         try {
-            // Check if session is still valid
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            
-            if (sessionError || !session) {
-                showNotification('Your session has expired. Please refresh the page and log in again.', 'error');
+            // Ensure we have a valid session before proceeding
+            const hasValidSession = await ensureValidSession();
+            if (!hasValidSession) {
+                clearTimeout(timeoutId);
+                // Save to localStorage as backup before failing
+                localStorage.setItem('nidipo_form_backup', JSON.stringify({
+                    formData,
+                    timestamp: new Date().toISOString(),
+                    userId: currentUser.id
+                }));
+                showNotification('Draft saved locally. Please refresh the page to sync with server.', 'error');
                 setIsSaving(false);
                 return;
-            }
-
-            // If session is close to expiring (less than 5 minutes), refresh it
-            const expiresAt = session.expires_at ? session.expires_at * 1000 : 0;
-            const timeUntilExpiry = expiresAt - Date.now();
-            
-            if (timeUntilExpiry < 5 * 60 * 1000 && timeUntilExpiry > 0) {
-                const { error: refreshError } = await supabase.auth.refreshSession();
-                if (refreshError) {
-                    showNotification('Session refresh failed. Please save your work and log in again.', 'error');
-                    // Save to localStorage as backup
-                    localStorage.setItem('nidipo_form_backup', JSON.stringify({
-                        formData,
-                        timestamp: new Date().toISOString(),
-                        userId: currentUser.id
-                    }));
-                    setIsSaving(false);
-                    return;
-                }
             }
 
             const draftData = {
@@ -1409,6 +1485,8 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                 .select()
                 .single();
 
+            clearTimeout(timeoutId);
+
             if (error) {
                 throw error;
             }
@@ -1426,6 +1504,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
             showNotification('Draft saved successfully!', 'success');
             
         } catch (error: any) {
+            clearTimeout(timeoutId);
             console.error('Save draft error:', error);
             
             // Save to localStorage as fallback
@@ -1435,7 +1514,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                 userId: currentUser.id
             }));
             
-            if (error.message?.includes('JWT') || error.message?.includes('auth')) {
+            if (error.message?.includes('JWT') || error.message?.includes('auth') || error.code === 'PGRST301') {
                 showNotification('Session expired. Your work has been saved locally. Please refresh and log in again.', 'error');
             } else {
                 showNotification(`Error saving draft: ${error.message}. Your work has been saved locally.`, 'error');
@@ -1461,11 +1540,16 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
         setIsSubmitting(true);
         
         try {
-            // Check session before submitting
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            
-            if (sessionError || !session) {
-                showNotification('Your session has expired. Your work is saved locally. Please refresh and log in again.', 'error');
+            // Ensure we have a valid session before proceeding
+            const hasValidSession = await ensureValidSession();
+            if (!hasValidSession) {
+                // Save to localStorage as backup before failing
+                localStorage.setItem('nidipo_form_backup', JSON.stringify({
+                    formData,
+                    timestamp: new Date().toISOString(),
+                    userId: currentUser.id
+                }));
+                showNotification('Session expired. Your work is saved locally. Please refresh and log in again.', 'error');
                 setIsSubmitting(false);
                 return;
             }
@@ -1520,7 +1604,19 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
             
         } catch (error: any) {
             console.error('Submit error:', error);
-            showNotification(`Error saving patient data: ${error.message}`, 'error');
+            
+            // Save to localStorage as backup
+            localStorage.setItem('nidipo_form_backup', JSON.stringify({
+                formData,
+                timestamp: new Date().toISOString(),
+                userId: currentUser.id
+            }));
+            
+            if (error.message?.includes('JWT') || error.message?.includes('auth') || error.code === 'PGRST301') {
+                showNotification('Session expired. Your work is saved locally. Please refresh and log in again.', 'error');
+            } else {
+                showNotification(`Error saving patient data: ${error.message}. Your work has been saved locally.`, 'error');
+            }
         } finally {
             setIsSubmitting(false);
         }
@@ -1583,11 +1679,32 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
         <div className="form-page-container">
             <div className="page-header">
                 <h1>{editingPatient ? 'Edit Patient Data' : 'Add New Patient Data'}</h1>
-                {lastSaveTime && (
-                    <p style={{ fontSize: '0.875rem', color: '#666' }}>
-                        Last saved: {lastSaveTime.toLocaleTimeString()}
-                    </p>
-                )}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    {sessionWarning && (
+                        <div style={{ 
+                            color: '#f59e0b', 
+                            fontSize: '0.875rem', 
+                            display: 'flex', 
+                            alignItems: 'center', 
+                            gap: '0.5rem',
+                            padding: '0.5rem 1rem',
+                            backgroundColor: '#fef3c7',
+                            borderRadius: '0.375rem',
+                            border: '1px solid #fbbf24'
+                        }}>
+                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
+                                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
+                                <path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995z"/>
+                            </svg>
+                            Session expiring soon - saving draft recommended
+                        </div>
+                    )}
+                    {lastSaveTime && (
+                        <p style={{ fontSize: '0.875rem', color: '#666', margin: 0 }}>
+                            Last saved: {lastSaveTime.toLocaleTimeString()}
+                        </p>
+                    )}
+                </div>
             </div>
             <div className="form-content-wrapper">
                  <ProgressBar currentStep={currentStep} steps={formStructure.map(s => s.title)} />
@@ -1604,18 +1721,6 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                         <div className="form-navigation-steps">
                             {currentStep < formStructure.length - 1 ? (
                                 <>
-                                    <button 
-                                        type="button" 
-                                        className="btn btn-secondary" 
-                                        onClick={handleSaveDraft}
-                                        disabled={isSaving || !formData.serialNumber}
-                                    >
-                                        {isSaving ? 'Saving...' : 'Save Draft'}
-                                    </button>
-                                    <button type="button" className="btn" onClick={nextStep}>Next</button>
-                                </>
-                            ) : (
-                                <div style={{ display: 'flex', gap: '0.5rem' }}>
                                     <button 
                                         type="button" 
                                         className="btn btn-secondary" 
@@ -2010,6 +2115,9 @@ function AuthPage({ hasAdmin, onAdminCreated }: AuthPageProps) {
                     <input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)} required />
                 </div>
                 <button type="submit" className="btn" disabled={loading}>{loading ? 'Logging In...' : 'Log In'}</button>
+                <button type="button" onClick={() => setAuthMode('reset')} style={{background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', marginTop: '1rem', textDecoration: 'underline'}}>
+                    Forgot Password?
+                </button>
             </form>
         );
     };
@@ -2018,14 +2126,6 @@ function AuthPage({ hasAdmin, onAdminCreated }: AuthPageProps) {
         <div className="auth-container">
             <div className="auth-form">
                 {renderForm()}
-                {authMode === 'login' && (
-                    <>
-                        {/* ... email and password fields ... */}
-                        <button type="button" onClick={() => setAuthMode('reset')} style={{background: 'none', border: 'none', color: 'var(--primary-color)', cursor: 'pointer', marginBottom: '1rem'}}>
-                            Forgot Password?
-                        </button>
-                    </>
-                )}
                 {error && <p className="error-message">{error}</p>}
             </div>
         </div>
@@ -2332,4 +2432,17 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />
   </React.StrictMode>,
-);
+);Save Draft'}
+                                    </button>
+                                    <button type="button" className="btn" onClick={nextStep}>Next</button>
+                                </>
+                            ) : (
+                                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-secondary" 
+                                        onClick={handleSaveDraft}
+                                        disabled={isSaving || !formData.serialNumber}
+                                    >
+                                        {isSaving ? 'Saving...' : '
+                
