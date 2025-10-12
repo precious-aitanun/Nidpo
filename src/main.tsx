@@ -1359,87 +1359,93 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
     };
     
     const handleSaveDraft = async () => {
-        if (!formData.serialNumber) {
-            showNotification('Please enter a Serial Number...', 'error');
-            return;
-        }
+    if (!formData.serialNumber) {
+        showNotification('Please enter a Serial Number/Institutional Code before saving draft', 'error');
+        return;
+    }
 
-        setIsSaving(true);
-        
-        try {
-            const draftData = {
-                user_id: currentUser.id,
-                center_id: currentUser.role === 'admin' && formData.centerId 
-                    ? parseInt(formData.centerId) 
-                    : currentUser.centerId,
-                patient_id: formData.serialNumber,
-                form_data: formData,
-                updated_at: new Date().toISOString()
-            };
-
-            const { data, error } = await supabase
-                .from('drafts')
-                .upsert(draftData, { 
-                    onConflict: 'user_id,patient_id,center_id',
-                    ignoreDuplicates: false 
-                })
-                .select()
-                .single();
-
-            if (error) throw error;
-
-            setDraftId(data.id);
-            setLastSaveTime(new Date());
-            localStorage.setItem('nidipo_form_backup', JSON.stringify({
-                formData,
-                timestamp: new Date().toISOString(),
-                userId: currentUser.id
-            }));
-            
-            showNotification('Draft saved successfully!', 'success');
-            
-        } catch (error: any) {
-            console.error('Save draft error:', error);
-            
-            // Check if it was a timeout/abort
-            if (error.name === 'AbortError' || error.message?.includes('timed out')) {
-                showNotification('Request timed out. Refreshing connection and retrying...', 'error');
-                await new Promise(r => setTimeout(r, 1000)); // Wait 1 second
-                // Retry once
-                try {
-                    const { data: retryData, error: retryError } = await supabase
-                        .from('drafts')
-                        .upsert(draftData, { 
-                            onConflict: 'user_id,patient_id,center_id',
-                            ignoreDuplicates: false 
-                        })
-                        .select()
-                        .single();
-                    if (!retryError) {
-                        setDraftId(retryData.id);
-                        showNotification('Draft saved on retry!', 'success');
-                    } else {
-                        throw retryError;
-                    }
-                } catch (retryErr) {
-                    showNotification('Connection still unstable. Saved locally.', 'error');
-                }
-            } else if (error.message?.includes('JWT') || error.message?.includes('Unauthorized')) {
-                showNotification('Session expired. Please refresh the page and log in again.', 'error');
-            } else {
-                showNotification(`Error saving draft: ${error.message}`, 'error');
-            }
-
-            // Always backup locally
-            localStorage.setItem('nidipo_form_backup', JSON.stringify({
-                formData,
-                timestamp: new Date().toISOString(),
-                userId: currentUser.id
-            }));
-        } finally {
-            setIsSaving(false); // ✅ Now this ALWAYS runs
-        }
+    setIsSaving(true);
+    
+    // Define draftData BEFORE the try block so retry can access it
+    const draftData = {
+        user_id: currentUser.id,
+        center_id: currentUser.role === 'admin' && formData.centerId 
+            ? parseInt(formData.centerId) 
+            : currentUser.centerId,
+        patient_id: formData.serialNumber,
+        form_data: formData,
+        updated_at: new Date().toISOString()
     };
+    
+    try {
+        const { data, error } = await supabase
+            .from('drafts')
+            .upsert(draftData, { 
+                onConflict: 'user_id,patient_id,center_id',
+                ignoreDuplicates: false 
+            })
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        setDraftId(data.id);
+        setLastSaveTime(new Date());
+        localStorage.setItem('nidipo_form_backup', JSON.stringify({
+            formData,
+            timestamp: new Date().toISOString(),
+            userId: currentUser.id
+        }));
+        
+        showNotification('Draft saved successfully!', 'success');
+        
+    } catch (error: any) {
+        console.error('Save draft error:', error);
+        
+        // Check if it was a timeout/abort
+        if (error.name === 'AbortError' || error.message?.includes('timed out')) {
+            showNotification('Request timed out. Refreshing connection and retrying...', 'error');
+            await new Promise(r => setTimeout(r, 1000)); // Wait 1 second
+            
+            // Retry once
+            try {
+                const { data: retryData, error: retryError } = await supabase
+                    .from('drafts')
+                    .upsert(draftData, { 
+                        onConflict: 'user_id,patient_id,center_id',
+                        ignoreDuplicates: false 
+                    })
+                    .select()
+                    .single();
+                
+                if (!retryError) {
+                    setDraftId(retryData.id);
+                    setLastSaveTime(new Date());
+                    showNotification('Draft saved on retry!', 'success');
+                    setIsSaving(false);
+                    return;
+                } else {
+                    throw retryError;
+                }
+            } catch (retryErr) {
+                showNotification('Connection still unstable. Saved locally.', 'error');
+            }
+        } else if (error.message?.includes('JWT') || error.message?.includes('Unauthorized')) {
+            showNotification('Session expired. Please refresh the page and log in again.', 'error');
+        } else {
+            showNotification(`Error saving draft: ${error.message}`, 'error');
+        }
+
+        // Always backup locally
+        localStorage.setItem('nidipo_form_backup', JSON.stringify({
+            formData,
+            timestamp: new Date().toISOString(),
+            userId: currentUser.id
+        }));
+    } finally {
+        setIsSaving(false); // ✅ Always runs
+    }
+};            
     // Submit final form with session check
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
