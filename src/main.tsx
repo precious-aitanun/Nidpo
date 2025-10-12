@@ -2045,12 +2045,6 @@ function AuthPage({ hasAdmin, onAdminCreated }: AuthPageProps) {
     );
 }
 
-const ReconnectingBanner = () => (
-    <div className="reconnecting-banner">
-        <LoadingSpinner /> Reconnecting...
-    </div>
-);
-
 // --- MAIN APP COMPONENT ---
 function App() {
     const [session, setSession] = useState<AuthSession | null>(null);
