@@ -1250,23 +1250,6 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
         // Removed the auto-load draft logic that was here before
     }, [editingPatient, editingDraft]);
 
-    // Auto-save to localStorage every 2 minutes
-    useEffect(() => {
-        const autoSaveInterval = setInterval(() => {
-            if (Object.keys(formData).length > 0 && formData.serialNumber) {
-                const backupData = {
-                    formData,
-                    timestamp: new Date().toISOString(),
-                    userId: currentUser.id
-                };
-                localStorage.setItem('nidipo_form_backup', JSON.stringify(backupData));
-                console.log('Auto-saved to localStorage at', new Date().toLocaleTimeString());
-            }
-        }, 120000); // Every 2 minutes
-
-        return () => clearInterval(autoSaveInterval);
-    }, [formData, currentUser.id]);
-
     // NEW: Load from localStorage on mount if available (as a safety net)
     useEffect(() => {
         if (!editingPatient && !editingDraft) {
@@ -1298,19 +1281,40 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
         }
     }, [editingPatient, editingDraft, currentUser.id, showNotification]);
 
+    
     const handleInputChange = (fieldId: string, value: any) => {
-        setFormData((prev: any) => ({
-            ...prev,
-            [fieldId]: value
-        }));
+      const newFormData = {
+          ...formData,
+          [fieldId]: value
+      };
+      setFormData(newFormData);
+      
+      // Save to localStorage immediately
+      localStorage.setItem('nidipo_form_backup', JSON.stringify({
+          formData: newFormData,
+          timestamp: new Date().toISOString(),
+          userId: currentUser.id
+      }));
     };
 
     const handleCheckboxChange = (fieldId: string, option: string, checked: boolean) => {
-        const currentValues = formData[fieldId] || [];
-        const newValues = checked
-            ? [...currentValues, option]
-            : currentValues.filter((item: string) => item !== option);
-        setFormData((prev: any) => ({ ...prev, [fieldId]: newValues }));
+      const currentValues = formData[fieldId] || [];
+      const newValues = checked
+          ? [...currentValues, option]
+          : currentValues.filter((item: string) => item !== option);
+      
+      const newFormData = {
+          ...formData,
+          [fieldId]: newValues
+      };
+      setFormData(newFormData);
+      
+      // Save to localStorage immediately
+      localStorage.setItem('nidipo_form_backup', JSON.stringify({
+          formData: newFormData,
+          timestamp: new Date().toISOString(),
+          userId: currentUser.id
+      }));
     };
 
     const nextStep = () => setCurrentStep(prev => Math.min(prev + 1, formStructure.length - 1));
@@ -2045,7 +2049,6 @@ function AuthPage({ hasAdmin, onAdminCreated }: AuthPageProps) {
     );
 }
 
-// --- MAIN APP COMPONENT ---
 function App() {
     const [session, setSession] = useState<AuthSession | null>(null);
     const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -2073,6 +2076,23 @@ function App() {
         window.location.hash = '/';
         setSession(null); 
     };
+
+    // Auto-reload when tab becomes visible again
+    // This ensures a fresh Supabase connection
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                console.log('Tab became visible, reloading to refresh Supabase connection...');
+                // Small delay to ensure tab is fully active
+                setTimeout(() => {
+                    window.location.reload();
+                }, 500);
+            }
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+    }, []);
 
     useEffect(() => {
         const checkAdminExists = async () => {
@@ -2205,26 +2225,6 @@ function App() {
             authListener.subscription.unsubscribe();
         };
     }, [showNotification]);
-
-    // Refresh token every 45 minutes to keep it fresh
-    useEffect(() => {
-        if (!session) return;
-
-        const tokenRefreshInterval = setInterval(async () => {
-            try {
-                const { data: { session: newSession }, error } = await supabase.auth.refreshSession();
-                if (error) {
-                    console.error('Token refresh error:', error);
-                } else if (newSession) {
-                    setSession(newSession);
-                }
-            } catch (err) {
-                console.error('Token refresh failed:', err);
-            }
-        }, 45 * 60 * 1000); // 45 minutes
-
-        return () => clearInterval(tokenRefreshInterval);
-    }, [session]);
 
     const handleLogout = async () => {
         await supabase.auth.signOut();

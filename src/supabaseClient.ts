@@ -48,17 +48,17 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: 'pkce', // More secure
+    flowType: 'pkce',
   },
   global: {
     headers: {
       'X-Client-Info': 'supabase-js/2.0',
     },
-    fetch: fetchWithTimeout, // Apply timeout to all requests
+    fetch: fetchWithTimeout,
   },
   realtime: {
     params: {
-      eventsPerSecond: 10,
+      eventsPerSecond: 0, // Disable realtime - we don't use subscriptions
     },
   },
 });
