@@ -20,15 +20,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 // Custom fetch wrapper with timeout
-const fetchWithTimeout = (url: string, options: any = {}, timeoutMs: number = 15000) => {
+const fetchWithTimeout = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
   const controller = new AbortController();
+  const timeoutMs = 15000;
+  
   const timeout = setTimeout(() => {
-    console.warn(`Request to ${url} timed out after ${timeoutMs}ms`);
+    console.warn(`Request timed out after ${timeoutMs}ms`);
     controller.abort();
   }, timeoutMs);
 
-  return fetch(url, {
-    ...options,
+  return fetch(input, {
+    ...init,
     signal: controller.signal,
   })
     .then((response) => {
