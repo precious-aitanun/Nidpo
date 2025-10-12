@@ -388,30 +388,35 @@ function DraftsPage({ currentUser, showNotification, onEditDraft }: DraftsPagePr
     const [drafts, setDrafts] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
-    const fetchDrafts = async () => {
+    const fetchDrafts = useCallback(async () => {
         setLoading(true);
-        
-        let query = supabase
-            .from('drafts')
-            .select('*');
-        
-        if (currentUser.role !== 'admin') {
-            query = query.eq('user_id', currentUser.id);
-        }
+        try {
+            let query = supabase
+                .from('drafts')
+                .select('*');
+            
+            if (currentUser.role !== 'admin') {
+                query = query.eq('user_id', currentUser.id);
+            }
+    
+            const { data, error } = await query.order('updated_at', { ascending: false });
+    
+            if (error) throw error;
 
-        const { data, error } = await query.order('updated_at', { ascending: false });
-
-        if (error) {
-            showNotification('Error fetching drafts: ' + error.message, 'error');
-        } else {
             setDrafts(data || []);
+        } catch (error: any) {
+            showNotification('Error fetching drafts: ' + error.message, 'error');
+            if (error.message?.includes('JWT')) {
+                showNotification('Your session may have expired. Please refresh the page.', 'error');
+            }
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
-    };
+    }, [currentUser, showNotification]);
 
     useEffect(() => {
         fetchDrafts();
-    }, [currentUser]);
+    }, [fetchDrafts]);
 
     const handleDeleteDraft = async (draftId: number) => {
         if (!confirm('Are you sure you want to delete this draft?')) return;
@@ -1230,45 +1235,6 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
     const [isSaving, setIsSaving] = useState(false);
     const [draftId, setDraftId] = useState<number | null>(editingDraft?.id || null);
     const [lastSaveTime, setLastSaveTime] = useState<Date | null>(null);
-    const [sessionWarning, setSessionWarning] = useState(false);
-
-    // Session monitoring - check every minute
-    useEffect(() => {
-        const checkSession = async () => {
-            try {
-                const { data: { session } } = await supabase.auth.getSession();
-                if (session?.expires_at) {
-                    const expiresAt = session.expires_at * 1000;
-                    const timeUntilExpiry = expiresAt - Date.now();
-                    const minutesUntilExpiry = timeUntilExpiry / (1000 * 60);
-                    
-                    // Show warning if less than 10 minutes remaining
-                    if (minutesUntilExpiry < 10 && minutesUntilExpiry > 0) {
-                        setSessionWarning(true);
-                        
-                        // Auto-refresh if less than 5 minutes
-                        if (minutesUntilExpiry < 5) {
-                            console.log('Auto-refreshing session...');
-                            await supabase.auth.refreshSession();
-                            setSessionWarning(false);
-                        }
-                    } else {
-                        setSessionWarning(false);
-                    }
-                }
-            } catch (error) {
-                console.error('Session check error:', error);
-            }
-        };
-
-        // Check immediately
-        checkSession();
-
-        // Then check every minute
-        const interval = setInterval(checkSession, 60000);
-
-        return () => clearInterval(interval);
-    }, []);
 
     // FIX #2: Remove auto-loading of drafts on mount
     // Users want a fresh form when clicking "Add Patient"
@@ -1329,7 +1295,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                 }
             }
         }
-    }, [editingPatient, editingDraft, currentUser.id]);
+    }, [editingPatient, editingDraft, currentUser.id, showNotification]);
 
     const handleInputChange = (fieldId: string, value: any) => {
         setFormData((prev: any) => ({
@@ -1391,42 +1357,6 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
         };
     };
 
-    // Helper function to ensure valid session before operations
-    const ensureValidSession = async (): Promise<boolean> => {
-        try {
-            const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-            
-            if (sessionError || !session) {
-                showNotification('Your session has expired. Please refresh the page and log in again.', 'error');
-                return false;
-            }
-
-            // Check if session is expired or about to expire (within 5 minutes)
-            const expiresAt = session.expires_at ? session.expires_at * 1000 : 0;
-            const timeUntilExpiry = expiresAt - Date.now();
-            
-            // If expired or expiring soon, try to refresh
-            if (timeUntilExpiry < 5 * 60 * 1000) {
-                console.log('Session expiring soon, attempting refresh...');
-                const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
-                
-                if (refreshError || !refreshData.session) {
-                    showNotification('Session expired. Please refresh the page and log in again.', 'error');
-                    return false;
-                }
-                
-                console.log('Session refreshed successfully');
-                return true;
-            }
-            
-            return true;
-        } catch (error) {
-            console.error('Session check error:', error);
-            showNotification('Session error. Please refresh the page.', 'error');
-            return false;
-        }
-    };
-
     const handleSaveDraft = async () => {
         if (!formData.serialNumber) {
             showNotification('Please enter a Serial Number/Institutional Code before saving draft', 'error');
@@ -1435,37 +1365,7 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
 
         setIsSaving(true);
         
-        // Set a timeout to detect stuck operations
-        const timeoutId = setTimeout(() => {
-            if (isSaving) {
-                console.warn('Draft save operation taking too long...');
-                showNotification('Network slow - attempting to save...', 'error');
-                
-                // Save to localStorage as backup
-                localStorage.setItem('nidipo_form_backup', JSON.stringify({
-                    formData,
-                    timestamp: new Date().toISOString(),
-                    userId: currentUser.id
-                }));
-            }
-        }, 15000); // 15 second timeout
-        
         try {
-            // Ensure we have a valid session before proceeding
-            const hasValidSession = await ensureValidSession();
-            if (!hasValidSession) {
-                clearTimeout(timeoutId);
-                // Save to localStorage as backup before failing
-                localStorage.setItem('nidipo_form_backup', JSON.stringify({
-                    formData,
-                    timestamp: new Date().toISOString(),
-                    userId: currentUser.id
-                }));
-                showNotification('Draft saved locally. Please refresh the page to sync with server.', 'error');
-                setIsSaving(false);
-                return;
-            }
-
             const draftData = {
                 user_id: currentUser.id,
                 center_id: currentUser.role === 'admin' && formData.centerId 
@@ -1485,8 +1385,6 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                 .select()
                 .single();
 
-            clearTimeout(timeoutId);
-
             if (error) {
                 throw error;
             }
@@ -1494,7 +1392,6 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
             setDraftId(data.id);
             setLastSaveTime(new Date());
             
-            // Also save to localStorage as backup
             localStorage.setItem('nidipo_form_backup', JSON.stringify({
                 formData,
                 timestamp: new Date().toISOString(),
@@ -1504,17 +1401,15 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
             showNotification('Draft saved successfully!', 'success');
             
         } catch (error: any) {
-            clearTimeout(timeoutId);
             console.error('Save draft error:', error);
             
-            // Save to localStorage as fallback
             localStorage.setItem('nidipo_form_backup', JSON.stringify({
                 formData,
                 timestamp: new Date().toISOString(),
                 userId: currentUser.id
             }));
             
-            if (error.message?.includes('JWT') || error.message?.includes('auth') || error.code === 'PGRST301') {
+            if (error.message?.includes('JWT') || error.message?.includes('auth') || error.code === 'PGRST301' || error.message?.includes('Unauthorized')) {
                 showNotification('Session expired. Your work has been saved locally. Please refresh and log in again.', 'error');
             } else {
                 showNotification(`Error saving draft: ${error.message}. Your work has been saved locally.`, 'error');
@@ -1540,20 +1435,6 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
         setIsSubmitting(true);
         
         try {
-            // Ensure we have a valid session before proceeding
-            const hasValidSession = await ensureValidSession();
-            if (!hasValidSession) {
-                // Save to localStorage as backup before failing
-                localStorage.setItem('nidipo_form_backup', JSON.stringify({
-                    formData,
-                    timestamp: new Date().toISOString(),
-                    userId: currentUser.id
-                }));
-                showNotification('Session expired. Your work is saved locally. Please refresh and log in again.', 'error');
-                setIsSubmitting(false);
-                return;
-            }
-
             const coreData = {
                 patientId: formData.serialNumber,
                 age: formData.age,
@@ -1594,7 +1475,6 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
                         .eq('patient_id', formData.serialNumber);
                 }
                 
-                // Clear localStorage backup
                 localStorage.removeItem('nidipo_form_backup');
                 
                 showNotification('Patient data submitted successfully!', 'success');
@@ -1605,14 +1485,13 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
         } catch (error: any) {
             console.error('Submit error:', error);
             
-            // Save to localStorage as backup
             localStorage.setItem('nidipo_form_backup', JSON.stringify({
                 formData,
                 timestamp: new Date().toISOString(),
                 userId: currentUser.id
             }));
             
-            if (error.message?.includes('JWT') || error.message?.includes('auth') || error.code === 'PGRST301') {
+            if (error.message?.includes('JWT') || error.message?.includes('auth') || error.code === 'PGRST301' || error.message?.includes('Unauthorized')) {
                 showNotification('Session expired. Your work is saved locally. Please refresh and log in again.', 'error');
             } else {
                 showNotification(`Error saving patient data: ${error.message}. Your work has been saved locally.`, 'error');
@@ -1680,25 +1559,6 @@ function AddPatientPage({ showNotification, onPatientAdded, currentUser, editing
             <div className="page-header">
                 <h1>{editingPatient ? 'Edit Patient Data' : 'Add New Patient Data'}</h1>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    {sessionWarning && (
-                        <div style={{ 
-                            color: '#f59e0b', 
-                            fontSize: '0.875rem', 
-                            display: 'flex', 
-                            alignItems: 'center', 
-                            gap: '0.5rem',
-                            padding: '0.5rem 1rem',
-                            backgroundColor: '#fef3c7',
-                            borderRadius: '0.375rem',
-                            border: '1px solid #fbbf24'
-                        }}>
-                            <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
-                                <path d="M8 15A7 7 0 1 1 8 1a7 7 0 0 1 0 14zm0 1A8 8 0 1 0 8 0a8 8 0 0 0 0 16z"/>
-                                <path d="M7.002 11a1 1 0 1 1 2 0 1 1 0 0 1-2 0zM7.1 4.995a.905.905 0 1 1 1.8 0l-.35 3.507a.552.552 0 0 1-1.1 0L7.1 4.995z"/>
-                            </svg>
-                            Session expiring soon - saving draft recommended
-                        </div>
-                    )}
                     {lastSaveTime && (
                         <p style={{ fontSize: '0.875rem', color: '#666', margin: 0 }}>
                             Last saved: {lastSaveTime.toLocaleTimeString()}
@@ -1934,7 +1794,7 @@ function ResetPasswordPage({ showNotification }: { showNotification: (msg: strin
             }
         };
         checkSession();
-    }, []);
+    }, [showNotification]);
 
     const handleUpdatePassword = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -2313,6 +2173,28 @@ function App() {
         authListener.subscription.unsubscribe();
     };
 }, [showNotification]);
+
+    // Proactively refresh session on browser tab focus to prevent stale tokens
+    useEffect(() => {
+        const refreshSession = () => {
+            supabase.auth.getSession();
+        };
+
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                refreshSession();
+            }
+        };
+
+        window.addEventListener('focus', refreshSession);
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('focus', refreshSession);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
+    }, []);
+
     const handleLogout = async () => {
         await supabase.auth.signOut();
         setCurrentPage('dashboard');
