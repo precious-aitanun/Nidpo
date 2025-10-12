@@ -2052,7 +2052,6 @@ const ReconnectingBanner = () => (
 );
 
 // --- MAIN APP COMPONENT ---
-
 function App() {
     const [session, setSession] = useState<AuthSession | null>(null);
     const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
@@ -2064,7 +2063,6 @@ function App() {
     const [isSidebarOpen, setSidebarOpen] = useState(false);
     const [editingPatient, setEditingPatient] = useState<Patient | null>(null);
     const [editingDraft, setEditingDraft] = useState<any | null>(null);
-    const [isReconnecting, setIsReconnecting] = useState(false);
 
     const urlHash = window.location.hash;
     const params = new URLSearchParams(urlHash.substring(urlHash.indexOf('?')));
@@ -2135,117 +2133,103 @@ function App() {
             }
         };
 
-    const initializeSession = async () => {
-    try {
-        if (isInitializing.current) return; // Prevent duplicate initialization
-        isInitializing.current = true;
-        
-        const hash = window.location.hash;
-        
-        const { data: { session }, error } = await supabase.auth.getSession();
-        
-        if (error) {
-            console.error("Session error:", error);
-            showNotification("Failed to initialize session.", "error");
-            setLoading(false);
-            isInitializing.current = false;
-            return;
-        }
+        const initializeSession = async () => {
+            try {
+                if (isInitializing.current) return;
+                isInitializing.current = true;
+                
+                const hash = window.location.hash;
+                
+                const { data: { session }, error } = await supabase.auth.getSession();
+                
+                if (error) {
+                    console.error("Session error:", error);
+                    setLoading(false);
+                    isInitializing.current = false;
+                    return;
+                }
 
-        // If we have a session and it's a recovery, redirect to reset page
-        if (session && hash.includes('type=recovery')) {
-            setSession(session);
-            window.location.hash = '#/reset-password';
-            setLoading(false);
-            isInitializing.current = false;
-            return;
-        }
+                if (session && hash.includes('type=recovery')) {
+                    setSession(session);
+                    window.location.hash = '#/reset-password';
+                    setLoading(false);
+                    isInitializing.current = false;
+                    return;
+                }
 
-        if (!session) {
-            await checkAdminExists();
-            setLoading(false);
-            isInitializing.current = false;
-            return;
-        }
+                if (!session) {
+                    await checkAdminExists();
+                    setLoading(false);
+                    isInitializing.current = false;
+                    return;
+                }
 
-        setSession(session);
-        
-        if (session?.user) {
-            console.log('Fetching initial data for user:', session.user.id);
-            await fetchInitialData(session.user);
-        } else {
-            console.log('Session exists but no user');
-            setLoading(false);
-        }
-        
-        isInitializing.current = false;
-    } catch (error) {
-        console.error("Error initializing session:", error);
-        setLoading(false);
-        isInitializing.current = false;
-    }
-};
-
-    initializeSession();
-
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-    async (event, session) => {
-        console.log('Auth event:', event, 'isInitializing:', isInitializing.current);
-
-        setIsReconnecting(false); // Hide banner on any auth event
-        
-        if (event === 'PASSWORD_RECOVERY') {
-            setSession(session);
-            window.location.hash = '#/reset-password';
-            return;
-        }
-        
-        if (event === 'SIGNED_OUT') {
-            setSession(null);
-            setCurrentUser(null);
-            setLoading(false);
-            isInitializing.current = false;
-            return;
-        }
-        
-        // Only handle SIGNED_IN if we're not already initializing (to avoid duplicate calls)
-        if (event === 'SIGNED_IN' && session?.user && !isInitializing.current) {
-            isInitializing.current = true;
-            setSession(session);
-            await fetchInitialData(session.user);
-            isInitializing.current = false;
-        }
-    }
-);
-
-    return () => {
-        authListener.subscription.unsubscribe();
-    };
-}, [showNotification]);
-
-    // Proactively refresh session on browser tab focus to prevent stale tokens
-    useEffect(() => {
-        const refreshSession = () => {
-            // Only trigger if there's an active session
-            if (session) {
-                setIsReconnecting(true);
-                supabase.auth.getSession(); // This will trigger the onAuthStateChange listener
+                setSession(session);
+                
+                if (session?.user) {
+                    await fetchInitialData(session.user);
+                } else {
+                    setLoading(false);
+                }
+                
+                isInitializing.current = false;
+            } catch (error) {
+                console.error("Error initializing session:", error);
+                setLoading(false);
+                isInitializing.current = false;
             }
         };
 
-        const handleVisibilityChange = () => {
-            if (document.visibilityState === 'visible') {
-                refreshSession();
-            }
-        };
+        initializeSession();
 
-        window.addEventListener('focus', refreshSession);
-        document.addEventListener('visibilitychange', handleVisibilityChange);
+        const { data: authListener } = supabase.auth.onAuthStateChange(
+            async (event, session) => {
+                if (event === 'PASSWORD_RECOVERY') {
+                    setSession(session);
+                    window.location.hash = '#/reset-password';
+                    return;
+                }
+                
+                if (event === 'SIGNED_OUT') {
+                    setSession(null);
+                    setCurrentUser(null);
+                    setLoading(false);
+                    isInitializing.current = false;
+                    return;
+                }
+                
+                if (event === 'SIGNED_IN' && session?.user && !isInitializing.current) {
+                    isInitializing.current = true;
+                    setSession(session);
+                    await fetchInitialData(session.user);
+                    isInitializing.current = false;
+                }
+            }
+        );
 
         return () => {
-            window.removeEventListener('focus', refreshSession);
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            authListener.subscription.unsubscribe();
         };
+    }, [showNotification]);
+
+    // Refresh token every 45 minutes to keep it fresh
+    useEffect(() => {
+        if (!session) return;
+
+        const tokenRefreshInterval = setInterval(async () => {
+            try {
+                const { data: { session: newSession }, error } = await supabase.auth.refreshSession();
+                if (error) {
+                    console.error('Token refresh error:', error);
+                } else if (newSession) {
+                    setSession(newSession);
+                }
+            } catch (err) {
+                console.error('Token refresh failed:', err);
+            }
+        }, 45 * 60 * 1000); // 45 minutes
+
+        return () => clearInterval(tokenRefreshInterval);
     }, [session]);
 
     const handleLogout = async () => {
@@ -2329,7 +2313,7 @@ function App() {
                     currentUser={currentUser}
                     editingPatient={editingPatient}
                     editingDraft={editingDraft}
-                    isReconnecting={isReconnecting}
+                    isReconnecting={false}
                 />;
             case 'drafts':
                 if (!['admin', 'data-entry', 'researcher'].includes(currentUser.role)) {
@@ -2354,7 +2338,6 @@ function App() {
     
     return (
         <div className="app-layout">
-            {isReconnecting && <ReconnectingBanner />}
             {notifications.map(n => <Notification key={n.id} {...n} onClose={() => setNotifications(p => p.filter(i => i.id !== n.id))} />)}
             <Sidebar 
                 currentPage={currentPage} 
@@ -2382,3 +2365,5 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>,
 );
+
+
