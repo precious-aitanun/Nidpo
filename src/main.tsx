@@ -599,73 +599,94 @@ function PatientsPage({ currentUser, showNotification, onEditPatient }: Patients
         );
     }, [patients, searchTerm]);
     
-    const exportToCsv = () => {
-        const allFormFields: string[] = [];
-        formStructure.forEach(section => {
-            section.fields.forEach(field => {
-                if (field.type !== 'monitoring_table') {
-                    allFormFields.push(field.id);
-                } else {
-                    for (let day = 1; day <= 14; day++) {
-                        ['morning', 'afternoon', 'night'].forEach(time => {
-                            allFormFields.push(`glucose_day${day}_${time}`);
-                        });
-                    }
+const exportToCsv = () => {
+    console.log(`Total patients in state: ${patients.length}`);
+    console.log(`Filtered patients: ${filteredPatients.length}`);
+    console.log(`Search term: "${searchTerm}"`);
+    
+    const allFormFields: string[] = [];
+    formStructure.forEach(section => {
+        section.fields.forEach(field => {
+            if (field.type !== 'monitoring_table') {
+                allFormFields.push(field.id);
+            } else {
+                for (let day = 1; day <= 14; day++) {
+                    ['morning', 'afternoon', 'night'].forEach(time => {
+                        allFormFields.push(`glucose_day${day}_${time}`);
+                    });
                 }
-            });
-        });
-
-        const headers = ['Patient ID', 'Age', 'Sex', 'Center', 'Date Added', ...allFormFields];
-        
-        const rows = filteredPatients.map(p => {
-            const baseData = [
-                p.patientId,
-                p.age,
-                p.sex,
-                p.centers?.name || 'N/A',
-                p.dateAdded
-            ];
-            
-            const formDataValues = allFormFields.map(fieldId => {
-                // Check formData first, which is the primary source
-                let value = p.formData?.[fieldId];
-                
-                // If not in formData, check if it's one of the core fields stored at root level
-                if (value === undefined || value === null) {
-                    if (fieldId === 'serialNumber') value = p.patientId;
-                    else if (fieldId === 'age') value = p.age;
-                    else if (fieldId === 'sex') value = p.sex;
-                    else if (fieldId === 'centerId') value = p.centerId;
-                }
-                
-                if (value === undefined || value === null) return '';
-                if (Array.isArray(value)) return value.join('; ');
-                return value;
-            });
-            
-            return [...baseData, ...formDataValues];
-        });
-      
-        const escapeCsvField = (field: any) => {
-            const str = String(field);
-            if (str.includes(',') || str.includes('"') || str.includes('\n')) {
-                return `"${str.replace(/"/g, '""')}"`;
             }
-            return str;
-        };
+        });
+    });
 
-        let csvContent = "data:text/csv;charset=utf-8," 
-            + headers.map(escapeCsvField).join(",") + "\n" 
-            + rows.map(row => row.map(escapeCsvField).join(",")).join("\n");
+    const headers = ['Patient ID', 'Age', 'Sex', 'Center', 'Date Added', ...allFormFields];
+    
+    const rows = filteredPatients.map((p, index) => {
+        if (index < 3 || index >= filteredPatients.length - 3) {
+            console.log(`Row ${index}: Patient ID = ${p.patientId}`);
+        }
+        
+        const baseData = [
+            p.patientId,
+            p.age,
+            p.sex,
+            p.centers?.name || 'N/A',
+            p.dateAdded
+        ];
+        
+        const formDataValues = allFormFields.map(fieldId => {
+            // Check formData first, which is the primary source
+            let value = p.formData?.[fieldId];
+            
+            // If not in formData, check if it's one of the core fields stored at root level
+            if (value === undefined || value === null) {
+                if (fieldId === 'serialNumber') value = p.patientId;
+                else if (fieldId === 'age') value = p.age;
+                else if (fieldId === 'sex') value = p.sex;
+                else if (fieldId === 'centerId') value = p.centerId;
+            }
+            
+            if (value === undefined || value === null) return '';
+            if (Array.isArray(value)) return value.join('; ');
+            return value;
+        });
+        
+        return [...baseData, ...formDataValues];
+    });
 
-        const encodedUri = encodeURI(csvContent);
-        const link = document.createElement("a");
-        link.setAttribute("href", encodedUri);
-        link.setAttribute("download", `patients_export_${new Date().toISOString().split('T')[0]}.csv`);
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-    }
+    console.log(`Total rows created: ${rows.length}`);
+
+    const escapeCsvField = (field: any) => {
+        const str = String(field);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+    };
+
+    // Build CSV content
+    const headerLine = headers.map(escapeCsvField).join(",");
+    const dataLines = rows.map(row => row.map(escapeCsvField).join(","));
+    const csvContent = headerLine + "\n" + dataLines.join("\n");
+    
+    console.log(`CSV content length: ${csvContent.length} characters`);
+    console.log(`CSV lines: ${dataLines.length + 1} (including header)`);
+
+    // Use Blob instead of data URI for large files
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    console.log(`Blob size: ${blob.size} bytes`);
+    
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `patients_export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    
+    showNotification(`Exported ${rows.length} patients successfully`, 'success');
+}
 
     if (loading) return <LoadingSpinner />;
 
