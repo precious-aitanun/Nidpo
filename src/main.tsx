@@ -627,7 +627,17 @@ function PatientsPage({ currentUser, showNotification, onEditPatient }: Patients
             ];
             
             const formDataValues = allFormFields.map(fieldId => {
-                const value = p.formData?.[fieldId];
+                // Check formData first, which is the primary source
+                let value = p.formData?.[fieldId];
+                
+                // If not in formData, check if it's one of the core fields stored at root level
+                if (value === undefined || value === null) {
+                    if (fieldId === 'serialNumber') value = p.patientId;
+                    else if (fieldId === 'age') value = p.age;
+                    else if (fieldId === 'sex') value = p.sex;
+                    else if (fieldId === 'centerId') value = p.centerId;
+                }
+                
                 if (value === undefined || value === null) return '';
                 if (Array.isArray(value)) return value.join('; ');
                 return value;
@@ -635,7 +645,7 @@ function PatientsPage({ currentUser, showNotification, onEditPatient }: Patients
             
             return [...baseData, ...formDataValues];
         });
-
+      
         const escapeCsvField = (field: any) => {
             const str = String(field);
             if (str.includes(',') || str.includes('"') || str.includes('\n')) {
