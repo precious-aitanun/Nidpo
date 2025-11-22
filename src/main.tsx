@@ -150,8 +150,8 @@ const formStructure: FormSection[] = [
             { id: 'urineCultureOrganism', label: 'If Yes, isolated organism(s)', type: 'text', condition: (data) => data.urineCulture === 'Yes' },
             { id: 'urineSensitivity', label: 'Urine antibiotic sensitivity', type: 'text', condition: (data) => data.urineCulture === 'Yes' },
             { id: 'urineResistance', label: 'Urine antibiotic resistance', type: 'text', condition: (data) => data.urineCulture === 'Yes' },
-            { id: 'lftAlt', label: 'ALT', type: 'radio', options: ['High', 'Normal', 'Low'], required: true, helpText: "Liver function tests" },
-            { id: 'lftAst', label: 'AST', type: 'radio', options: ['High', 'Normal', 'Low'], required: true },
+            { id: 'lftAlt', label: 'ALT', type: 'radio', options: ['High', 'Normal', 'Low', 'Not Done'], required: true, helpText: "Liver function tests" },
+            { id: 'lftAst', label: 'AST', type: 'radio', options: ['High', 'Normal', 'Low', 'Not Done'], required: true },
         ],
     },
     {
